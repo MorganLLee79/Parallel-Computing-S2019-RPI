@@ -58,10 +58,10 @@ int* convertToNumber(char *inputString, int* result) {
   j = bits-1;
 
   //Iterate through the string
-  for(i = 0; i < digits + 1; i++) {
+  for(i = 0; i < digits; i++) {
 
     //Read the current digit, converting to a binary value
-    // Does this with simple if cases for each potential expected char.
+    // Does this with simple if cases for each potential expected char.a
     if(inputString[i] == 'F' ){  // F = 1111
       result[j] = 1;  result[j-1] = 1;  result[j-2] = 1;  result[j-3] = 1;
 
@@ -111,10 +111,10 @@ int* convertToNumber(char *inputString, int* result) {
       result[j]   = 0;  result[j-1] = 0;  result[j-2] = 0;  result[j-3] = 0;
 
     } else {
-      printf("ERROR: Unrecognized hex: \'%c\'.\n", inputString[i]);
+      printf("ERROR: Unrecognized hex: \'%c\' at index %d.\n", inputString[i], i);
     }
 
-    if(i % 128 == 0 && true) { //Only print every 128th digit, to shorten things. &&true for debug
+    if((/*i % 128 == 0 ||*/ i < 16) && true) { //Only part of the hex. && true for debuging/disabling
       printf("Converted %c to %d%d%d%d.\n", inputString[i], 
           result[j], result[j-1], result[j-2], result[j-3]);
     }
@@ -148,13 +148,13 @@ void readInput(char *inputFilePath) {
   buffer[0] = '0';
   strcpy(hex1, buffer);
 
-
   fscanf(fp, "%s", buffer + sizeof(char));
   buffer[0] = '0';
   strcpy(hex2, buffer);
 
   fclose(fp);
 
+  //printf("TEST: %ld\n%s\n", strlen(hex2), hex2);
   //printf("Read numbers:\n%s\n%s\n", hex1, hex2);
   
   //Convert the two hexadecimal strings into usable numbers, saving to globals bin1/2
@@ -225,11 +225,25 @@ void readInput(char *inputFilePath) {
 /************** Program ******************/
 
 //Calculate g_i and p_i for all 4096 bits i
-//bool[512] or * step1(struct hw1Num input1, struct hw1Num input2) {
+void step1() {
 
+  int i;
 
+  //printf("TEST XOR: %d, %d, %d, %d\n", 0^0, 1^0,0^1,1^1);
 
-//}
+  //xor things together
+  //Initial 0 index
+  gi[i] = bin1[i] ^  bin2[i]; //g_i = a_i xor b_i
+  pi[i] = bin1[i] || bin2[i];
+  ci[i] = gi[i];
+  //Other indices
+  for(i = 1; i < bits; i++){
+    gi[i] = bin1[i] ^  bin2[i]; //g_i = a_i xor b_i
+    pi[i] = bin1[i] || bin2[i];
+    ci[i] = gi[i] || (pi[i] && ci[i-1]); //TODO properly use ci?
+  }
+
+}
 
 
 //Calculate gg_j and gp_j for all 512 groups j using g_i and p_i
@@ -261,11 +275,12 @@ void readInput(char *inputFilePath) {
 
 
 //Master CLA routine
-// Output is written to a global, sumi
+// Input/Output via global variables, as in provided data structures.
 void cla() {
 
-}
+  step1();
 
+}
 
 
 
@@ -279,6 +294,8 @@ void main(int argc, char *argv[]){
 
   readInput(argv[1]);
 
+
+  cla();
 
   //printOutput(, "leeh17_hw_output.txt");
   
