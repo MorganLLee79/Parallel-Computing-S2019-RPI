@@ -1,65 +1,173 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h> //C99 standard? Too far ahead?
+#include <string.h>
+
+
+/***** Data Structures (Provided) *********/
+
+// EXAMPLE DATA STRUCTURE DESIGN AND LAYOUT FOR CLA
+#define input_size 1024
+#define block_size 8
+
+//Do not touch these defines
+#define digits (input_size+1)
+#define bits digits * 4
+#define ngroups bits/block_size
+#define nsections ngroups/block_size
+#define nsupersections nsections/block_size
+
+//Global definitions of the various arrays used in steps for easy access
+int gi[bits] = {0};
+int pi[bits] = {0};
+int ci[bits] = {0};
+
+int ggj[ngroups] = {0};
+int gpj[ngroups] = {0};
+int gcj[ngroups] = {0};
+
+int sgk[nsections] = {0};
+int spk[nsections] = {0};
+int sck[nsections] = {0};
+
+int ssgl[nsupersections] = {0} ;
+int sspl[nsupersections] = {0} ;
+int sscl[nsupersections] = {0} ;
+
+int sumi[bits] = {0};
+
+//Integer array of inputs in binary form
+int* bin1 = NULL;
+int* bin2 = NULL;
+
+//Character array of inputs in hex form
+char* hex1 = NULL;
+char* hex2 = NULL;
 
 
 /********** I/O and Setup **********/
 
-//Data Structure to save a number
-struct hw1Num {
-  //2d array of booleans, sub-arrays = 8 bit blocks (aka bytes)
-  bool value[512][8]  //4096 bits = 512 bytes of 8
-  //!!! Make sure value [0] is most significant byte
-
-  //Potentially replace with just using value[512][8]
-};
-
-
 //Convert the given hex string into a usable number.
 //Input:  A hexadecimal string representing an integer
-//Return: A number __TODO define type
-//         -1 = bug number
-struct hw1Num convertToNumber(char *inputString) {
+//Return: Binary array form of the given hex string through pointer input
+int* convertToNumber(char *inputString, int* result) {
 
-  int result;
+  int i;  //Track hex index
+  int j;  //Track binary index
 
-  result = -1;  //Initial "bug" value
+  j = bits-1;
 
+  //Iterate through the string
+  for(i = 0; i < digits + 1; i++) {
 
+    //Read the current digit, converting to a binary value
+    // Does this with simple if cases for each potential expected char.
+    if(inputString[i] == 'F' ){  // F = 1111
+      result[j] = 1;  result[j-1] = 1;  result[j-2] = 1;  result[j-3] = 1;
 
-    
-  return result;
+    } else if(inputString[i] == 'E') { // E = 1110
+      result[j] = 1;  result[j-1] = 1;  result[j-2] = 1;  result[j-3] = 0;
+
+    } else if(inputString[i] == 'D') { // 0 = 0000
+      result[j] = 1;  result[j-1] = 1;  result[j-2] = 0;  result[j-3] = 1;
+
+    } else if(inputString[i] == 'C') { // 0 = 0000
+      result[j] = 1;  result[j-1] = 1;  result[j-2] = 0;  result[j-3] = 0;
+
+    } else if(inputString[i] == 'B') { // 0 = 0000
+      result[j] = 1;  result[j-1] = 0;  result[j-2] = 1;  result[j-3] = 1;
+
+    } else if(inputString[i] == 'A') { // 0 = 0000
+      result[j] = 1;  result[j-1] = 0;  result[j-2] = 1;  result[j-3] = 0;
+
+    } else if(inputString[i] == '9') { // 0 = 0000
+      result[j] = 1;  result[j-1] = 0;  result[j-2] = 0;  result[j-3] = 1;
+
+    } else if(inputString[i] == '8') { // 0 = 0000
+      result[j] = 1;  result[j-1] = 0;  result[j-2] = 0;  result[j-3] = 0;
+
+    } else if(inputString[i] == '7') { // 0 = 0000
+      result[j] = 0;  result[j-1] = 1;  result[j-2] = 1;  result[j-3] = 1;
+
+    } else if(inputString[i] == '6') { // 0 = 0000
+      result[j] = 0;  result[j-1] = 1;  result[j-2] = 1;  result[j-3] = 0;
+
+    } else if(inputString[i] == '5') { // 0 = 0000
+      result[j] = 0;  result[j-1] = 1;  result[j-2] = 0;  result[j-3] = 1;
+
+    } else if(inputString[i] == '4') { // 0 = 0000
+      result[j] = 0;  result[j-1] = 4;  result[j-2] = 0;  result[j-3] = 0;
+
+    } else if(inputString[i] == '3') { // 0 = 0000
+      result[j] = 0;  result[j-1] = 0;  result[j-2] = 1;  result[j-3] = 1;
+
+    } else if(inputString[i] == '2') { // 0 = 0000
+      result[j] = 0;  result[j-1] = 0;  result[j-2] = 1;  result[j-3] = 0;
+
+    } else if(inputString[i] == '1') { // 0 = 0000
+      result[j] = 0;  result[j-1] = 0;  result[j-2] = 0;  result[j-3] = 1;
+
+    } else if(inputString[i] == '0') { // 0 = 0000
+      result[j]   = 0;  result[j-1] = 0;  result[j-2] = 0;  result[j-3] = 0;
+
+    } else {
+      printf("ERROR: Unrecognized hex: \'%c\'.\n", inputString[i]);
+    }
+
+    if(i % 128 == 0 && true) { //Only print every 128th digit, to shorten things. &&true for debug
+      printf("Converted %c to %d%d%d%d.\n", inputString[i], 
+          result[j], result[j-1], result[j-2], result[j-3]);
+    }
+
+    j = j - 4; //Iterate down; 4095 is most significant, 0 is least
+
+  }
+
+  printf("Finished converting to number, final i:%d final j: %d\n", i, j);
+
+  //return result;
 }
 
 
 // Begin reading in input files. Parses them as well
 //Input:  The file path
-//Return: The two numbers in the input file as an array of length 2.
-struct hw1Num[2] readInput(char *inputFilePath) {
+void readInput(char *inputFilePath) {
+
+  int bin1[bits];
+  int bin2[bits];
+
+  char hex1[digits+1];
+  char hex2[digits+1];
 
   FILE *fp;
-  char hexString1[1024];  //Know numbers will be 1024 characters long.
-  char hexString2[1024];
+  char buffer[digits+1];
 
-  struct hw1Num number1;
-  struct hw1Num number2;
-  
-
+  //Read from file into hex1 and hex2
   fp = fopen(inputFilePath, "r");
-  fscanf(fp, "%s", hexString1);  //Expecting single "words", one number per line
-  fscanf(fp, "%s", hexString2);
+  fscanf(fp, "%s", buffer + sizeof(char));  //Expecting single "words", one number per line
+  buffer[0] = '0';
+  strcpy(hex1, buffer);
+
+
+  fscanf(fp, "%s", buffer + sizeof(char));
+  buffer[0] = '0';
+  strcpy(hex2, buffer);
 
   fclose(fp);
 
+  //printf("Read numbers:\n%s\n%s\n", hex1, hex2);
   
-  //Convert the two hexadecimal strings into usable numbers
-  number1 = convertToNumber(hexString1);
-  number2 = convertToNumber(hexString2);
+  //Convert the two hexadecimal strings into usable numbers, saving to globals bin1/2
+  convertToNumber(hex1, bin1);
+  convertToNumber(hex2, bin2);
+
+  printf("bin1: %d%d%d%d \nbin2: %d%d%d%d\n", bin1[4095], bin1[4094], bin1[4093], bin1[4092],
+    bin2[4095], bin2[4094], bin2[4093], bin2[4092]);
   
 }
 
 
-char* convertToHexString(struct hw1Num inputNumber){
+//char* convertToHexString(int* inputNumber){
   /*int i;  //To traverse 512 bytes
   int j;  //Traverse 8 bits in byte
   int k;  //The sum of the bits, turned into base 10
@@ -72,7 +180,7 @@ char* convertToHexString(struct hw1Num inputNumber){
 
     }
   } */
-
+/*
   //Uh, this isn't part of CLA, hopefully it's fine to just use
   char hexOutput[1025];
   char tempBuffer;
@@ -87,13 +195,13 @@ char* convertToHexString(struct hw1Num inputNumber){
   
   return hexOutput;
 }
-
+*/
 
 // Takes in the number to be printed out and the file path and name to print to.
 //  The given file will have the number in hexadecimal format
 //Input:  The number we're printing. TODO: Format
 //        The file path/name string to print to. Ex: /here/folder/output.txt
-void printOutput(struct hw1Num inputNumber, char *filePath) {
+/*void printOutput(char *filePath) {
 
   FILE *fp;
   char *hexString;
@@ -112,16 +220,16 @@ void printOutput(struct hw1Num inputNumber, char *filePath) {
   fclose(fp);
 
 }
-
+*/
 
 /************** Program ******************/
 
 //Calculate g_i and p_i for all 4096 bits i
-bool[512] or * step1(struct hw1Num input1, struct hw1Num input2) {
+//bool[512] or * step1(struct hw1Num input1, struct hw1Num input2) {
 
 
 
-}
+//}
 
 
 //Calculate gg_j and gp_j for all 512 groups j using g_i and p_i
@@ -153,7 +261,8 @@ bool[512] or * step1(struct hw1Num input1, struct hw1Num input2) {
 
 
 //Master CLA routine
-struct hw1Num cla(input1, input2) {
+// Output is written to a global, sumi
+void cla() {
 
 }
 
@@ -168,9 +277,29 @@ struct hw1Num cla(input1, input2) {
 void main(int argc, char *argv[]){
   printf("TESTING: Initial Program Open\n");
 
-  
+  readInput(argv[1]);
 
 
-  printOutput(sum__, "leeh17_hw_output.txt");
+  //printOutput(, "leeh17_hw_output.txt");
   
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
