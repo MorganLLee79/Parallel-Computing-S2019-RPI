@@ -12,10 +12,10 @@
 
 //Do not touch these defines
 #define digits (input_size+1)
-#define bits digits * 4
-#define ngroups bits/block_size
-#define nsections ngroups/block_size
-#define nsupersections nsections/block_size
+#define bits digits * 4                       //4096
+#define ngroups bits/block_size               //512
+#define nsections ngroups/block_size          //64
+#define nsupersections nsections/block_size   //8
 
 //Global definitions of the various arrays used in steps for easy access
 int gi[bits] = {0};
@@ -321,44 +321,188 @@ void step4() {
     //Iterate/manage k as well.
     k = k + 4;
 
-    if(k >= nsections) { printf("WARNING: step4, k surpassed nsections! It is now: %d.\n", j); }
+    if(k >= nsections) { printf("WARNING: step4, k surpassed nsections! It is now: %d.\n", k); }
   }
 }
 
 
 //Calculate ssc_l using ssg_l and ssp_l for all l super sections and 0 for ssc_-1
 void step5() {
-  int l;
-  int k = 0;
-tg5re4ghr
-  for(l=0; l < nsupersections; l++) {
-    ssgl[l] = sgk[k+3]
-      || (sgk[k+2] && spk[k+3])
-      || (sgk[k+1] && spk[k+3] && spk[k+2])
-      || (sgk[k]   && spk[k+3] && spk[k+2] && spk[k+1]);
+  //int l;
 
-    sspl[l] = spk[k+3] && spk[k+2] && spk[k+1] && spk[k];
+  //ssc_-1 = 0
+  sscl[0] = ssgl[0] || (sspl[0] && 0);
 
-    //Iterate/manage k as well.
-    k = k + 4;
+  //And now, doing the other 7 super sections.
+  sscl[1] = ssgl[1] || (sspl[1] && (ssgl[0] || (sspl[0] && 0)));
+  sscl[2] = ssgl[2] || (sspl[2] && (ssgl[1] || (sspl[1] &&
+    (ssgl[0] || (sspl[0] && 0)))));
+  sscl[3] = ssgl[3] || (sspl[2] && (ssgl[2] || (sspl[2] && 
+    (ssgl[1] || (sspl[1] &&
+    (ssgl[0] || (sspl[0] && 0)))))));
+  sscl[4] = ssgl[4] || (sspl[3] && (ssgl[3] || (sspl[2] && 
+    (ssgl[2] || (sspl[2] && 
+    (ssgl[1] || (sspl[1] &&
+    (ssgl[0] || (sspl[0] && 0)))))))));
+  sscl[5] = ssgl[5] || (sspl[4] && (ssgl[4] || (sspl[3] && 
+    (ssgl[3] || (sspl[2] && 
+    (ssgl[2] || (sspl[2] && 
+    (ssgl[1] || (sspl[1] &&
+    (ssgl[0] || (sspl[0] && 0)))))))))));
+  sscl[6] = ssgl[6] || (sspl[6] && (ssgl[5] || (sspl[4] &&
+    (ssgl[4] || (sspl[3] && 
+    (ssgl[3] || (sspl[2] && 
+    (ssgl[2] || (sspl[2] && 
+    (ssgl[1] || (sspl[1] &&
+    (ssgl[0] || (sspl[0] && 0)))))))))))));
+  sscl[7] = ssgl[7] || (sspl[7] && (ssgl[6] || (sspl[6] && 
+    (ssgl[5] || (sspl[4] &&
+    (ssgl[4] || (sspl[3] && 
+    (ssgl[3] || (sspl[2] && 
+    (ssgl[2] || (sspl[2] && 
+    (ssgl[1] || (sspl[1] &&
+    (ssgl[0] || (sspl[0] && 0)))))))))))))));
 
-    if(k >= nsections) { printf("WARNING: step5, k surpassed nsections! It is now: %d.\n", j); }
-  }
+  /* Not using for loop to partially simulate parallelism. Below should be effective the same
+  for(l=1; l < nsupersections; l++) {
+
+    sscl[l] = ssgl[l] || (sspl[l] && sscl[l-1]);
+  }*/
 }
 
 
 //Calculate sc_k using sg_k and sp_k and correct ssc_l, l==k div 8 as
 //  super sectional carry-in for all sections k
+void step6() {
+  int k; 
 
+  for(k=0; k < nsections; k++) {
+
+    //sck[k] = sgk[k] || (spk[k] && sck[k-1]);
+
+    sck[k+0] = sgk[k+0] || (spk[k+0] && sscl[k/8]);
+    sck[k+1] = sgk[k+1] || (spk[k+1] && (sgk[k+0] || (spk[k+0] && sscl[k/8])));
+    sck[k+2] = sgk[k+2] || (spk[k+2] && (sgk[k+1] || (spk[k+1] &&
+      (sgk[k+0] || (spk[k+0] && sscl[k/8])))));
+    sck[k+3] = sgk[k+3] || (spk[k+2] && (sgk[k+2] || (spk[k+2] && 
+      (sgk[k+1] || (spk[k+1] &&
+      (sgk[k+0] || (spk[k+0] && sscl[k/8])))))));
+    sck[k+4] = sgk[k+4] || (spk[k+3] && (sgk[k+3] || (spk[k+2] && 
+      (sgk[k+2] || (spk[k+2] && 
+      (sgk[k+1] || (spk[k+1] &&
+      (sgk[k+0] || (spk[k+0] && sscl[k/8])))))))));
+    sck[k+5] = sgk[k+5] || (spk[k+4] && (sgk[k+4] || (spk[k+3] && 
+      (sgk[k+3] || (spk[k+2] && 
+      (sgk[k+2] || (spk[k+2] && 
+      (sgk[k+1] || (spk[k+1] &&
+      (sgk[k+0] || (spk[k+0] && sscl[k/8])))))))))));
+    sck[k+6] = sgk[k+6] || (spk[k+6] && (sgk[k+5] || (spk[k+4] &&
+      (sgk[k+4] || (spk[k+3] && 
+      (sgk[k+3] || (spk[k+2] && 
+      (sgk[k+2] || (spk[k+2] && 
+      (sgk[k+1] || (spk[k+1] &&
+      (sgk[k+0] || (spk[k+0] && sscl[k/8])))))))))))));
+    sck[k+7] = sgk[k+7] || (spk[k+7] && (sgk[k+6] || (spk[k+6] && 
+      (sgk[k+5] || (spk[k+4] &&
+      (sgk[k+4] || (spk[k+3] && 
+      (sgk[k+3] || (spk[k+2] && 
+      (sgk[k+2] || (spk[k+2] && 
+      (sgk[k+1] || (spk[k+1] &&
+      (sgk[k+0] || (spk[k+0] && sscl[k/8])))))))))))))));
+  }
+}
 
 //Calculate gc_j using gg_j, gp_j, and correct sc_k, k = j div 8 as sectional carry-in for all groups j
+void step7() {
+  int j; 
 
+  for(j=0; j < ngroups; j++) {
+
+    gcj[j+0] = ggj[j+0] || (gpj[j+0] && sck[j/8]);
+    gcj[j+1] = ggj[j+1] || (gpj[j+1] && (ggj[j+0] || (gpj[j+0] && sck[j/8])));
+    gcj[j+2] = ggj[j+2] || (gpj[j+2] && (ggj[j+1] || (gpj[j+1] &&
+      (ggj[j+0] || (gpj[j+0] && sck[j/8])))));
+    gcj[j+3] = ggj[j+3] || (gpj[j+2] && (ggj[j+2] || (gpj[j+2] && 
+      (ggj[j+1] || (gpj[j+1] &&
+      (ggj[j+0] || (gpj[j+0] && sck[j/8])))))));
+    gcj[j+4] = ggj[j+4] || (gpj[j+3] && (ggj[j+3] || (gpj[j+2] && 
+      (ggj[j+2] || (gpj[j+2] && 
+      (ggj[j+1] || (gpj[j+1] &&
+      (ggj[j+0] || (gpj[j+0] && sck[j/8])))))))));
+    gcj[j+5] = ggj[j+5] || (gpj[j+4] && (ggj[j+4] || (gpj[j+3] && 
+      (ggj[j+3] || (gpj[j+2] && 
+      (ggj[j+2] || (gpj[j+2] && 
+      (ggj[j+1] || (gpj[j+1] &&
+      (ggj[j+0] || (gpj[j+0] && sck[j/8])))))))))));
+    gcj[j+6] = ggj[j+6] || (gpj[j+6] && (ggj[j+5] || (gpj[j+4] &&
+      (ggj[j+4] || (gpj[j+3] && 
+      (ggj[j+3] || (gpj[j+2] && 
+      (ggj[j+2] || (gpj[j+2] && 
+      (ggj[j+1] || (gpj[j+1] &&
+      (ggj[j+0] || (gpj[j+0] && sck[j/8])))))))))))));
+    gcj[j+7] = ggj[j+7] || (gpj[j+7] && (ggj[j+6] || (gpj[j+6] && 
+      (ggj[j+5] || (gpj[j+4] &&
+      (ggj[j+4] || (gpj[j+3] && 
+      (ggj[j+3] || (gpj[j+2] && 
+      (ggj[j+2] || (gpj[j+2] && 
+      (ggj[j+1] || (gpj[j+1] &&
+      (ggj[j+0] || (gpj[j+0] && sck[j/8])))))))))))))));
+  }
+}
 
 //Calculate c_i using g_i, p_i, and correct gc_j, j = i div 8 as group carry-in for all bits i
+void step8() {
+  int i; 
 
+  for(i=0; i < bits; i++) {
+
+    ci[i+0] = gi[i+0] || (pi[i+0] && gcj[i/8]);
+    ci[i+1] = gi[i+1] || (pi[i+1] && (gi[i+0] || (pi[i+0] && gcj[i/8])));
+    ci[i+2] = gi[i+2] || (pi[i+2] && (gi[i+1] || (pi[i+1] &&
+      (gi[i+0] || (pi[i+0] && gcj[i/8])))));
+    ci[i+3] = gi[i+3] || (pi[i+2] && (gi[i+2] || (pi[i+2] && 
+      (gi[i+1] || (pi[i+1] &&
+      (gi[i+0] || (pi[i+0] && gcj[i/8])))))));
+    ci[i+4] = gi[i+4] || (pi[i+3] && (gi[i+3] || (pi[i+2] && 
+      (gi[i+2] || (pi[i+2] && 
+      (gi[i+1] || (pi[i+1] &&
+      (gi[i+0] || (pi[i+0] && gcj[i/8])))))))));
+    ci[i+5] = gi[i+5] || (pi[i+4] && (gi[i+4] || (pi[i+3] && 
+      (gi[i+3] || (pi[i+2] && 
+      (gi[i+2] || (pi[i+2] && 
+      (gi[i+1] || (pi[i+1] &&
+      (gi[i+0] || (pi[i+0] && gcj[i/8])))))))))));
+    ci[i+6] = gi[i+6] || (pi[i+6] && (gi[i+5] || (pi[i+4] &&
+      (gi[i+4] || (pi[i+3] && 
+      (gi[i+3] || (pi[i+2] && 
+      (gi[i+2] || (pi[i+2] && 
+      (gi[i+1] || (pi[i+1] &&
+      (gi[i+0] || (pi[i+0] && gcj[i/8])))))))))))));
+    ci[i+7] = gi[i+7] || (pi[i+7] && (gi[i+6] || (pi[i+6] && 
+      (gi[i+5] || (pi[i+4] &&
+      (gi[i+4] || (pi[i+3] && 
+      (gi[i+3] || (pi[i+2] && 
+      (gi[i+2] || (pi[i+2] && 
+      (gi[i+1] || (pi[i+1] &&
+      (gi[i+0] || (pi[i+0] && gcj[i/8])))))))))))))));
+  }
+  //I started to regret not just making a sub loop at the end. This code is kinda gross >,<
+}
 
 //Calculate sum_i using a_i * b_i * c_i-1 for all i where * is xor
+void step9() {
+  int i = 0;
 
+  //bin1[i] = a_i
+  //bin2[i] = b_i
+
+  sumi[i] = bin1[i] || bin2[i] || 0; //0 represents nothing being carried in, since first index
+
+  //This would actually be a parallel.
+  for(i = 1; i < bits; i++) {
+    sumi[i] = bin1[i] || bin2[i] || ci[i-1];
+  }
+}
 
 
 //Master CLA routine
@@ -366,6 +510,24 @@ tg5re4ghr
 void cla() {
 
   step1();
+
+  step2();
+
+  step3();
+
+  step4();
+
+  step5();
+
+  step6();
+  
+  step7();
+  
+  step8();
+  
+  step9();
+
+  //Sum has now been set! It is a binary array, with most significant bit being at sumi[4095]
 
 }
 
