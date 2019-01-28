@@ -49,8 +49,8 @@ char* hex2 = NULL;
 
 //Convert the given hex string into a usable number.
 //Input:  A hexadecimal string representing an integer
-//Return: Binary array form of the given hex string through pointer input
-int* convertToNumber(char *inputString, int* result) {
+//Return (through param pointer): Binary array form of the given hex string through pointer input
+void convertToNumber(char *inputString, int* result) {
 
   int i;  //Track hex index
   int j;  //Track binary index
@@ -114,7 +114,7 @@ int* convertToNumber(char *inputString, int* result) {
       printf("ERROR: Unrecognized hex: \'%c\' at index %d.\n", inputString[i], i);
     }
 
-    if((/*i % 128 == 0 ||*/ i < 16) && true) { //Only part of the hex. && true for debuging/disabling
+    if((/*i % 128 == 0 ||*/ i < 4) && true) { //Only part of the hex. && true for debuging/disabling
       printf("Converted %c to %d%d%d%d.\n", inputString[i], 
           result[j], result[j-1], result[j-2], result[j-3]);
     }
@@ -133,26 +133,36 @@ int* convertToNumber(char *inputString, int* result) {
 //Input:  The file path
 void readInput(char *inputFilePath) {
 
-  int bin1[bits];
-  int bin2[bits];
+  //int bin1[bits];
+  //int bin2[bits];
+  bin1 = (int *) malloc( (bits) * sizeof(int));
+  bin2 = (int *) malloc( (bits) * sizeof(int));
 
-  char hex1[digits+1];
-  char hex2[digits+1];
+  //char hex1[digits+1];
+  //char hex2[digits+1];
+  hex1 = (char *) malloc( (digits+1) * sizeof(char));
+  hex2 = (char *) malloc( (digits+1) * sizeof(char));
 
   FILE *fp;
-  char buffer[digits+1];
+  //char buffer[digits+1];
 
   //Read from file into hex1 and hex2
+  printf("Opening file at \"%s\".\n", inputFilePath);
   fp = fopen(inputFilePath, "r");
-  fscanf(fp, "%s", buffer + sizeof(char));  //Expecting single "words", one number per line
-  buffer[0] = '0';
-  strcpy(hex1, buffer);
+  fscanf(fp, "%s", hex1 + sizeof(char));
+  hex1[0] = '0';  //Add leading 0
+  //fscanf(fp, "%s", buffer + sizeof(char));  //Expecting single "words", one number per line
+  //buffer[0] = '0';
+  //strcpy(hex1, buffer);
 
-  fscanf(fp, "%s", buffer + sizeof(char));
-  buffer[0] = '0';
-  strcpy(hex2, buffer);
+  fscanf(fp, "%s", hex2 + sizeof(char));
+  hex2[0] = '0';
+  //fscanf(fp, "%s", buffer + sizeof(char));
+  //buffer[0] = '0';
+  //strcpy(hex2, buffer);
 
   fclose(fp);
+  printf("Closing file.\n");
 
   //printf("TEST: %ld\n%s\n", strlen(hex2), hex2);
   //printf("Read numbers:\n%s\n%s\n", hex1, hex2);
@@ -227,37 +237,114 @@ void readInput(char *inputFilePath) {
 //Calculate g_i and p_i for all 4096 bits i
 void step1() {
 
+  //gi = (int *) malloc( (bits) * sizeof(int));
+  //pi = (int *) malloc( (bits) * sizeof(int));
+
   int i;
 
   //printf("TEST XOR: %d, %d, %d, %d\n", 0^0, 1^0,0^1,1^1);
 
   //xor things together
-  //Initial 0 index
-  gi[i] = bin1[i] ^  bin2[i]; //g_i = a_i xor b_i
-  pi[i] = bin1[i] || bin2[i];
-  ci[i] = gi[i];
-  //Other indices
-  for(i = 1; i < bits; i++){
+  for(i = 0; i < bits; i++){
     gi[i] = bin1[i] ^  bin2[i]; //g_i = a_i xor b_i
     pi[i] = bin1[i] || bin2[i];
-    ci[i] = gi[i] || (pi[i] && ci[i-1]); //TODO properly use ci?
+    //ci[i] = gi[i] || (pi[i] && ci[i-1]); //TODO properly use ci?
   }
+
+  //printf("%d-%d-%d-%d--%d-\n", gi[i], pi[i], bin1[i], bin2[i], gi[bits-1]);
 
 }
 
 
 //Calculate gg_j and gp_j for all 512 groups j using g_i and p_i
+void step2() {
 
+  //ggj = (int *) malloc( (bits) * sizeof(int));
+  //gpj = (int *) malloc( (bits) * sizeof(int));
+
+  int j;
+  int i = 0;
+
+  for(j=0; j < ngroups; j++) {
+    ggj[j] = gi[i+3]
+      || (gi[i+2] && pi[i+3])
+      || (gi[i+1] && pi[i+3] && pi[i+2])
+      || (gi[i]   && pi[i+3] && pi[i+2] && pi[i+1]);
+
+    gpj[j] = pi[i+3] && pi[i+2] && pi[i+1] && pi[i];
+
+    //Iterate/manage i as well.
+    i = i + 4;
+
+    if(i >= bits) { printf("WARNING: step2, i surpassed bits! It is now: %d.\n", i); }
+  }
+}
 
 //Calculate sg_k and sp_k for all 64 sections k using ggj and gpj (larger subsections)
+void step3() {
+
+  //sgk = (int *) malloc( (bits) * sizeof(int));
+  //spk = (int *) malloc( (bits) * sizeof(int));
+
+  int k;
+  int j = 0;
+
+  for(k=0; k < nsections; k++) {
+    sgk[k] = ggj[j+3]
+      || (ggj[j+2] && gpj[j+3])
+      || (ggj[j+1] && gpj[j+3] && gpj[j+2])
+      || (ggj[j]   && gpj[j+3] && gpj[j+2] && gpj[j+1]);
+
+    spk[k] = gpj[j+3] && gpj[j+2] && gpj[j+1] && gpj[j];
+
+    //Iterate/manage j as well.
+    j = j + 4;
+
+    if(j >= ngroups) { printf("WARNING: step3, j surpassed ngroups! It is now: %d.\n", j); }
+  }
+}
 
 
 //Calculat ss_gl and sp_l for all 8 super sections l using sg_k and sp_k
+void step4() {
+  int l;
+  int k = 0;
 
+  for(l=0; l < nsupersections; l++) {
+    ssgl[l] = sgk[k+3]
+      || (sgk[k+2] && spk[k+3])
+      || (sgk[k+1] && spk[k+3] && spk[k+2])
+      || (sgk[k]   && spk[k+3] && spk[k+2] && spk[k+1]);
+
+    sspl[l] = spk[k+3] && spk[k+2] && spk[k+1] && spk[k];
+
+    //Iterate/manage k as well.
+    k = k + 4;
+
+    if(k >= nsections) { printf("WARNING: step4, k surpassed nsections! It is now: %d.\n", j); }
+  }
+}
 
 
 //Calculate ssc_l using ssg_l and ssp_l for all l super sections and 0 for ssc_-1
+void step5() {
+  int l;
+  int k = 0;
+tg5re4ghr
+  for(l=0; l < nsupersections; l++) {
+    ssgl[l] = sgk[k+3]
+      || (sgk[k+2] && spk[k+3])
+      || (sgk[k+1] && spk[k+3] && spk[k+2])
+      || (sgk[k]   && spk[k+3] && spk[k+2] && spk[k+1]);
 
+    sspl[l] = spk[k+3] && spk[k+2] && spk[k+1] && spk[k];
+
+    //Iterate/manage k as well.
+    k = k + 4;
+
+    if(k >= nsections) { printf("WARNING: step5, k surpassed nsections! It is now: %d.\n", j); }
+  }
+}
 
 
 //Calculate sc_k using sg_k and sp_k and correct ssc_l, l==k div 8 as
@@ -289,16 +376,17 @@ void cla() {
 //Begin program run here
 //Example Line: ./leeh17_hw1.c assignment1-testcase.txt
 //Creates output file leeh17_hw1_output.txt
-void main(int argc, char *argv[]){
+int main(int argc, char *argv[]){
   printf("TESTING: Initial Program Open\n");
 
   readInput(argv[1]);
 
-
   cla();
 
   //printOutput(, "leeh17_hw_output.txt");
-  
+ 
+  //TODO Empty things
+  return 1; 
 }
 
 
