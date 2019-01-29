@@ -11,8 +11,8 @@
 #define block_size 8
 
 //Do not touch these defines
-#define digits (input_size+1)
-#define bits digits * 4                       //4096
+#define digits (input_size+1)                 //1025
+#define bits digits * 4                       //4100
 #define ngroups bits/block_size               //512
 #define nsections ngroups/block_size          //64
 #define nsupersections nsections/block_size   //8
@@ -142,10 +142,12 @@ void readInput(char *inputFilePath) {
 
   //Read from file into hex1 and hex2
   scanf("%s", hex1 + sizeof(char));
-  hex1[0] = '0';  //Add leading 0
+  hex1[0] = '0';        //Add leading 0
+  hex1[digits] = '\0';  //Add null terminator
 
   scanf("%s", hex2 + sizeof(char));
   hex2[0] = '0';
+  hex2[digits] = '\0';
 
   //printf("TEST: %ld\n%s\n", strlen(hex2), hex2);
   //printf("Read numbers:\n%s\n%s\n", hex1, hex2);
@@ -177,7 +179,7 @@ char* convertToHexString(int* inputBinary){
   //Iterate up from the expected 
   for(i=0; i < digits; i++) {
 
-    currIndex = bits - 4*i - 1;
+    currIndex = bits - (4*i) - 1;
 
     a = inputBinary[currIndex - 0];  //Most significant index
     b = inputBinary[currIndex - 1];
@@ -186,7 +188,8 @@ char* convertToHexString(int* inputBinary){
 
     byteTotal = (8 * a) + (4 * b) + (2 * c) + (1 * d);
 
-    //printf("%d%d%d%d, at index %d, byte total: %d\n", a, b, c, d, currIndex, byteTotal);
+    //if(i>digits-8) {
+    //  printf("%d%d%d%d, at index %d, byte total: %d\n", a, b, c, d, currIndex, byteTotal); }
 
     if(byteTotal == 15)        {  temp = 'F';
     } else if(byteTotal == 14) {  temp = 'E';
@@ -214,46 +217,14 @@ char* convertToHexString(int* inputBinary){
 
   }
 
-  //printf("Ended at i:%d, index:%d\n", i, currIndex);
+  //printf("Ended at i:%d, bin index:%d; started at bin index:%d\n", i, currIndex-3, bits - 1);
+  //printf("%d%d%d%d\n", inputBinary[currIndex-0], inputBinary[currIndex-1],
+  //  inputBinary[currIndex-2], inputBinary[currIndex-3]);
 
   hexSum[i] = '\0'; //End the string.
 
   return hexSum;
 
-
-/*  //Iterate downwards, from the least to most significant values
-  for(i = digits+1; i > 0; i = i - 1){
-
-    //Hold the current total
-    temp = 0;
-    
-    for(j = 0; j < block_size; j++) { //Go from +0 to +7
-
-      //take j to power, add to k; multiple times 2^i
-
-
-
-    }
-
-    hexSum[digits-i]
-  } 
-
-  hexSum */
-
-/*
-  //Uh, this isn't part of CLA, hopefully it's fine to just use
-  char hexOutput[1025];
-  char tempBuffer;
-  int i;  //Will need to traverse so that most significant byte (value[0]) is at the front
-
-  for(i = 0; i < 512; i++) {
-    //TODO convert integer, probably
-    sprintf(tempBuffer, "%x", inputNumber.value[i]);
-
-    hexOutput
-  }
-  
-  return hexOutput; */
 }
 
 
@@ -261,12 +232,16 @@ char* convertToHexString(int* inputBinary){
 //  The given file will have the number in hexadecimal format
 // Prints out to stdout.
 void printOutput() {
-
+  //int i;
   char *hexString;
 
   //Convert number to usable/printable string
   hexString = convertToHexString(sumi);
-  
+
+  //printf("Sum:\n");
+  //for(i=0;i<bits;i++){  printf("%d", sumi[i]);}
+  //printf("\n");
+
   //Print
   printf("%s\n", hexString);
 
@@ -288,13 +263,13 @@ void step1() {
 
   //xor things together
   for(i = 0; i < bits; i++){
-    gi[i] = bin1[i] ^  bin2[i]; //g_i = a_i xor b_i
+    gi[i] = bin1[i] && bin2[i]; //g_i = a_i and b_i
     pi[i] = bin1[i] || bin2[i];
     //ci[i] = gi[i] || (pi[i] && ci[i-1]); //TODO properly use ci?
   }
 
   //printf("%d-%d-%d-%d--%d-\n", gi[i], pi[i], bin1[i], bin2[i], gi[bits-1]);
-  printf("step 1: %d, %d\n", gi[i-1], pi[i-1]);
+  //printf("step 1: %d, %d\n", gi[i-1], pi[i-1]);
 }
 
 
@@ -308,17 +283,21 @@ void step2() {
   int i = 0;
 
   for(j=0; j < ngroups; j++) {
-    ggj[j] = gi[i+3]
-      || (gi[i+2] && pi[i+3])
-      || (gi[i+1] && pi[i+3] && pi[i+2])
-      || (gi[i]   && pi[i+3] && pi[i+2] && pi[i+1]);
+    ggj[j] = gi[i+7]
+      || (gi[i+6] && pi[i+7])
+      || (gi[i+5] && pi[i+7] && pi[i+6])
+      || (gi[i+4] && pi[i+7] && pi[i+6] && pi[i+5]
+      || (gi[i+3] && pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4])
+      || (gi[i+2] && pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4] && pi[i+3])
+      || (gi[i+1] && pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4] && pi[i+3] && pi[i+2])
+      || (gi[i]   && pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4] && pi[i+3] && pi[i+2] && pi[i+1]));
 
-    gpj[j] = pi[i+3] && pi[i+2] && pi[i+1] && pi[i];
+    gpj[j] = pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4] && pi[i+3] && pi[i+2] && pi[i+1] && pi[i];
 
     //Iterate/manage i as well.
-    i = i + 4;
+    i = i + 8;
 
-    if(i >= bits) { printf("WARNING: step2, i surpassed bits! It is now: %d.\n", i); }
+    if(i > bits) { printf("WARNING: step2, i surpassed bits! It is now: %d.\n", i); }
   }
 }
 
@@ -332,7 +311,7 @@ void step3() {
   int j = 0;
 
   for(k=0; k < nsections; k++) {
-    sgk[k] = ggj[j+3]
+    /*sgk[k] = ggj[j+3]
       || (ggj[j+2] && gpj[j+3])
       || (ggj[j+1] && gpj[j+3] && gpj[j+2])
       || (ggj[j]   && gpj[j+3] && gpj[j+2] && gpj[j+1]);
@@ -340,9 +319,25 @@ void step3() {
     spk[k] = gpj[j+3] && gpj[j+2] && gpj[j+1] && gpj[j];
 
     //Iterate/manage j as well.
-    j = j + 4;
+    j = j + 4; */
+    sgk[k] = ggj[j+7]
+      || (ggj[j+6] && gpj[j+7])
+      || (ggj[j+5] && gpj[j+7] && gpj[j+6])
+      || (ggj[j+4] && gpj[j+7] && gpj[j+6] && gpj[j+5]
+      || (ggj[j+3] && gpj[j+7] && gpj[j+6] && gpj[j+5] && gpj[j+4])
+      || (ggj[j+2] && gpj[j+7] && gpj[j+6] && gpj[j+5] && gpj[j+4] && 
+            gpj[j+3])
+      || (ggj[j+1] && gpj[j+7] && gpj[j+6] && gpj[j+5] && gpj[j+4] && 
+            gpj[j+3] && gpj[j+2])
+      || (ggj[j]   && gpj[j+7] && gpj[j+6] && gpj[j+5] && gpj[j+4] && 
+            gpj[j+3] && gpj[j+2] && gpj[j+1]));
 
-    if(j >= ngroups) { printf("WARNING: step3, j surpassed ngroups! It is now: %d.\n", j); }
+    spk[j] = gpj[j+7] && gpj[j+6] && gpj[j+5] && gpj[j+4] && gpj[j+3] && gpj[j+2] && gpj[j+1] && gpj[j];
+
+    //Iterate/manage j as well.
+    j = j + 8;
+
+    if(j > ngroups) { printf("WARNING: step3, j surpassed ngroups! It is now: %d.\n", j); }
   }
 }
 
@@ -353,17 +348,33 @@ void step4() {
   int k = 0;
 
   for(l=0; l < nsupersections; l++) {
-    ssgl[l] = sgk[k+3]
+    /*ssgl[l] = sgk[k+3]
       || (sgk[k+2] && spk[k+3])
       || (sgk[k+1] && spk[k+3] && spk[k+2])
       || (sgk[k]   && spk[k+3] && spk[k+2] && spk[k+1]);
 
-    sspl[l] = spk[k+3] && spk[k+2] && spk[k+1] && spk[k];
+    sspl[l] = spk[k+3] && spk[k+2] && spk[k+1] && spk[k]; */
+
+    ssgl[l] = sgk[k+7]
+      || (sgk[k+6] && spk[k+7])
+      || (sgk[k+5] && spk[k+7] && spk[k+6])
+      || (sgk[k+4] && spk[k+7] && spk[k+6] && spk[k+5]
+      || (sgk[k+3] && spk[k+7] && spk[k+6] && spk[k+5] && spk[k+4])
+      || (sgk[k+2] && spk[k+7] && spk[k+6] && spk[k+5] && spk[k+4] && 
+            spk[k+3])
+      || (sgk[k+1] && spk[k+7] && spk[k+6] && spk[k+5] && spk[k+4] && 
+            spk[k+3] && spk[k+2])
+      || (sgk[k]   && spk[k+7] && spk[k+6] && spk[k+5] && spk[k+4] && 
+            spk[k+3] && spk[k+2] && spk[k+1]));
+
+    sspl[l] = spk[k+7] && spk[k+6] && spk[k+5] && spk[k+4] && 
+              spk[k+3] && spk[k+2] && spk[k+1] && spk[k];
+
 
     //Iterate/manage k as well.
-    k = k + 4;
+    k = k + 8;
 
-    if(k >= nsections) { printf("WARNING: step4, k surpassed nsections! It is now: %d.\n", k); }
+    if(k > nsections) { printf("WARNING: step4, k surpassed nsections! It is now: %d.\n", k); }
   }
 }
 
@@ -509,7 +520,7 @@ void step7() {
   }
 
 
-  printf("Step 7: sck:%d, %d\n", sck[0], j);
+  //printf("Step 7: sck:%d, %d\n", sck[0], j);
 }
 
 //Calculate c_i using g_i, p_i, and correct gc_j, j = i div 8 as group carry-in for all bits i
@@ -520,6 +531,8 @@ void step8() {
   for(i=0; i < bits; i = i + 8) {
 
     ci[i] = gi[i] || (pi[i] && gcj[i/8]);
+
+    
     for(x=1; x<8;x++){  //Each group
       ci[i+x] = gi[i+x] || (pi[i+x] && ci[i+x-1]);
     }
@@ -559,7 +572,11 @@ void step8() {
     */
   }
 
-  printf("Step 8: c=%d g=%d p=%d c-1=%d; %d\n", ci[1], gi[0], pi[0], gcj[0], i);
+  //printf("Step 8: c=%d g=%d p=%d c-1=%d; %d\n", ci[1], gi[0], pi[0], gcj[0], i);
+  /*printf("Step 8: i=%d, x=%d %d%d%d%d %d%d%d%d %d%d%d%d\n", i, x,
+    gi[i-x+1], gi[i-x+2], gi[i-x+3], gi[i-x+4],
+    pi[i-x+1], pi[i-x+2], pi[i-x+3], pi[i-x+4],
+    ci[i-x+2], ci[i-x+3], ci[i-x+4], ci[i-x+5]); */
 }
 
 //Calculate sum_i using a_i * b_i * c_i-1 for all i where * is xor
@@ -569,7 +586,8 @@ void step9() {
   //bin1[i] = a_i
   //bin2[i] = b_i
 
-  sumi[i] = bin1[i] ^ bin2[i] ^ 0; //0 represents nothing being carried in, since first index
+  //sumi[i] = gi[i] ^ pi[i] ^ 0; //0 represents nothing being carried in, since first index
+  sumi[i] = bin1[i] ^ bin2[i] ^ 0;
 
   //This would actually be a parallel.
   for(i = 1; i < bits; i++) {
@@ -577,8 +595,14 @@ void step9() {
     //sumi[i] = gi[i] ^ pi[i] ^ ci[i-1];
   }
 
-  printf("TESTING: sum:%d, %d, %d\n", sumi[0], (gi[0] ^ pi[0]) ^ 0, i);
-  printf("---%d, %d, %d\n", gi[1], pi[1], ci[0]);
+  /*printf("TESTING: sum:%d, %d, %d\n", sumi[i-1], bits, i);
+  printf("%d%d%d%d%d%d%d%d %d%d%d%d%d%d%d%d\n", 
+    sumi[i-1], sumi[i-2], sumi[i-3], sumi[i-4], sumi[i-5], sumi[i-6], sumi[i-7], sumi[i-8],
+    sumi[i-9], sumi[i-10], sumi[i-11], sumi[i-12], sumi[i-13], sumi[i-14], sumi[i-15], sumi[i-16]);
+  */
+
+  //for(i=0;i<bits;i++){ printf("%d", sumi[i]);
+  //} printf("\n");
 }
 
 
@@ -609,7 +633,45 @@ void cla() {
 }
 
 
+//Simple ripple carry tester. Mostly checking binary.
+void simpleRippleCarryTest(){
+  int i;
+  //int newGi; going to actually try using what was generated earlier.
+  //int newPi;
 
+  int rippleSum[bits] = {0};
+  int oldC = 0;
+
+  for(i=0; i<bits+1;i++){
+
+    if(i < 24 && false){  //Testing
+      printf("Ripple: oldC=%d, gi=%d, pi=%d:b1=%d or b2=%d; result=%d\n", 
+        oldC, gi[i], pi[i], bin1[i], bin2[i], gi[i] || (pi[i] && oldC));
+    }
+
+    rippleSum[i] = bin1[i] ^ bin2[i] ^ oldC;
+    //rippleSum[i] = gi[i] ^ pi[i] ^ oldC;
+    oldC = gi[i] || (pi[i] && oldC);
+
+  }
+
+  printf("Ripple Carry Test Results:\n%s\n\n", convertToHexString(rippleSum));
+
+  if(false) {
+    printf("\nRIPPLE\n");
+    for(i=0;i<bits;i++){  printf("%d", bin1[i]);}
+    printf("\n");
+    for(i=0;i<bits;i++){  printf("%d", bin2[i]);}
+    printf("\nRIPPLE\n");
+  }
+}
+
+//Sanity checking some stuff
+void relationsTests(){
+  printf("And (&&): %d, %d, %d, %d.\n", 0 && 0, 0 && 1, 1 && 0, 1 && 1);
+  printf("Or  (||): %d, %d, %d, %d.\n", 0 || 0, 0 || 1, 1 || 0, 1 || 1);
+  printf("XOR (^ ): %d, %d, %d, %d.\n", 0 ^  0, 0 ^  1, 1 ^  0, 1 ^  1);
+}
 
 
 //Begin program run here
@@ -620,14 +682,16 @@ int main(int argc, char *argv[]){
 
   readInput(argv[1]);
 
-  printf("\nInputs:\n%s\n\n%s\n\n", hex1, hex2);
-  printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
+  //printf("\nInputs:\n%s\n\n%s\n\n", hex1, hex2);
+  //printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
 
   //printf("Test convert to hex:\n%s\n%s\n", convertToHexString(bin1), convertToHexString(bin2));
 
   cla();
-  printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
+  //printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
 
+  //simpleRippleCarryTest();
+  //relationsTests();
 
   printOutput(); 
   //TODO free/empty things
