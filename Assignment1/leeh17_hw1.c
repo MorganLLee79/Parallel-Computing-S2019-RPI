@@ -133,36 +133,19 @@ void convertToNumber(char *inputString, int* result) {
 //Input:  The file path
 void readInput(char *inputFilePath) {
 
-  //int bin1[bits];
-  //int bin2[bits];
   bin1 = (int *) malloc( (bits) * sizeof(int));
   bin2 = (int *) malloc( (bits) * sizeof(int));
 
-  //char hex1[digits+1];
-  //char hex2[digits+1];
   hex1 = (char *) malloc( (digits+1) * sizeof(char));
   hex2 = (char *) malloc( (digits+1) * sizeof(char));
 
-  FILE *fp;
-  //char buffer[digits+1];
 
   //Read from file into hex1 and hex2
-  printf("Opening file at \"%s\".\n", inputFilePath);
-  fp = fopen(inputFilePath, "r");
-  fscanf(fp, "%s", hex1 + sizeof(char));
+  scanf("%s", hex1 + sizeof(char));
   hex1[0] = '0';  //Add leading 0
-  //fscanf(fp, "%s", buffer + sizeof(char));  //Expecting single "words", one number per line
-  //buffer[0] = '0';
-  //strcpy(hex1, buffer);
 
-  fscanf(fp, "%s", hex2 + sizeof(char));
+  scanf("%s", hex2 + sizeof(char));
   hex2[0] = '0';
-  //fscanf(fp, "%s", buffer + sizeof(char));
-  //buffer[0] = '0';
-  //strcpy(hex2, buffer);
-
-  fclose(fp);
-  printf("Closing file.\n");
 
   //printf("TEST: %ld\n%s\n", strlen(hex2), hex2);
   //printf("Read numbers:\n%s\n%s\n", hex1, hex2);
@@ -274,31 +257,20 @@ char* convertToHexString(int* inputBinary){
 }
 
 
-// Takes in the number to be printed out and the file path and name to print to.
+// Takes in the number to be printed out
 //  The given file will have the number in hexadecimal format
-//Input:  The number we're printing. TODO: Format
-//        The file path/name string to print to. Ex: /here/folder/output.txt
-void printOutput(char *filePath) {
+// Prints out to stdout.
+void printOutput() {
 
-  FILE *fp;
   char *hexString;
-    
-  //Make the new file
-  fp = fopen(filePath, "w+");
 
   //Convert number to usable/printable string
   hexString = convertToHexString(sumi);
   
-  
-  //Print/write to the file
-  fprintf(fp, "%s\n", hexString);
-  printf("Output:\n%s\n", hexString);
+  //Print
+  printf("%s\n", hexString);
 
-  //Alternate: fputs("String", fp); //Just prints to given output stream, no formatting
-
-  fclose(fp);
   free(hexString);
-
 }
 
 
@@ -617,10 +589,9 @@ int main(int argc, char *argv[]){
 
   cla();
 
-  printOutput("leeh17_hw_output.txt");
- 
+  printOutput(); 
   //TODO free/empty things
-  return 1; 
+  return 0; 
 }
 
 
