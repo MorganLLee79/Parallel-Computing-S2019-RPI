@@ -177,7 +177,7 @@ void readInput(char *inputFilePath) {
 }
 
 
-char* convertToHexString(int* inputNumber){
+char* convertToHexString(int* inputBinary){
   int i;
   int currIndex;  //Current sum index
 
@@ -192,16 +192,18 @@ char* convertToHexString(int* inputNumber){
   char* hexSum = (char *) malloc( (digits + 2) * sizeof(char));
   
   //Iterate up from the expected 
-  for(i=0; i < digits + 1; i++) {
+  for(i=0; i < digits; i++) {
 
     currIndex = bits - 4*i - 1;
 
-    a = sumi[currIndex - 0];  //Most significant index
-    b = sumi[currIndex - 1];
-    c = sumi[currIndex - 2];
-    d = sumi[currIndex - 3];  //Least significant index
+    a = inputBinary[currIndex - 0];  //Most significant index
+    b = inputBinary[currIndex - 1];
+    c = inputBinary[currIndex - 2];
+    d = inputBinary[currIndex - 3];  //Least significant index
 
     byteTotal = (8 * a) + (4 * b) + (2 * c) + (1 * d);
+
+    //printf("%d%d%d%d, at index %d, byte total: %d\n", a, b, c, d, currIndex, byteTotal);
 
     if(byteTotal == 15)        {  temp = 'F';
     } else if(byteTotal == 14) {  temp = 'E';
@@ -221,13 +223,15 @@ char* convertToHexString(int* inputNumber){
     } else if(byteTotal == 0)  {  temp = '0';
     } else {
       temp = '?';
-      printf("WARNING: Found incorrect byteTotal \'%d\' in convertToHexString()\n.", byteTotal);
+      printf("WARNING: Found incorrect byteTotal \'%d\' in convertToHexString().\n", byteTotal);
     }
 
     //Write the new char into our result string
     hexSum[i] = temp;
 
   }
+
+  printf("Ended at i:%d, index:%d\n", i, currIndex);
 
   hexSum[digits+1] = '\0'; //End the string.
 
@@ -607,6 +611,8 @@ int main(int argc, char *argv[]){
   printf("TESTING: Initial Program Open\n");
 
   readInput(argv[1]);
+
+  printf("%s\n%s\n", convertToHexString(bin1), convertToHexString(bin2));
 
   cla();
 
