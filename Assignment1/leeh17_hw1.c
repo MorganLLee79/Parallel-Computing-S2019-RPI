@@ -68,16 +68,16 @@ void convertToNumber(char *inputString, int* result) {
     } else if(inputString[i] == 'E') { // E = 1110
       result[j] = 1;  result[j-1] = 1;  result[j-2] = 1;  result[j-3] = 0;
 
-    } else if(inputString[i] == 'D') { // 0 = 0000
+    } else if(inputString[i] == 'D') { // D = 1100
       result[j] = 1;  result[j-1] = 1;  result[j-2] = 0;  result[j-3] = 1;
 
-    } else if(inputString[i] == 'C') { // 0 = 0000
+    } else if(inputString[i] == 'C') { // C = 0000
       result[j] = 1;  result[j-1] = 1;  result[j-2] = 0;  result[j-3] = 0;
 
-    } else if(inputString[i] == 'B') { // 0 = 0000
+    } else if(inputString[i] == 'B') { // B = 0000
       result[j] = 1;  result[j-1] = 0;  result[j-2] = 1;  result[j-3] = 1;
 
-    } else if(inputString[i] == 'A') { // 0 = 0000
+    } else if(inputString[i] == 'A') { // A = 0000
       result[j] = 1;  result[j-1] = 0;  result[j-2] = 1;  result[j-3] = 0;
 
     } else if(inputString[i] == '9') { // 0 = 0000
@@ -294,7 +294,7 @@ void step1() {
   }
 
   //printf("%d-%d-%d-%d--%d-\n", gi[i], pi[i], bin1[i], bin2[i], gi[bits-1]);
-
+  printf("step 1: %d, %d\n", gi[i-1], pi[i-1]);
 }
 
 
@@ -416,12 +416,18 @@ void step5() {
 //Calculate sc_k using sg_k and sp_k and correct ssc_l, l==k div 8 as
 //  super sectional carry-in for all sections k
 void step6() {
-  int k; 
+  int k;
+  int x;
 
-  for(k=0; k < nsections; k++) {
+  for(k=0; k < nsections; k = k + 8) {
+    
+    sck[k] = sgk[k] || (spk[k] && sscl[k/8]);
+    for(x=1; x<8;x++){  //Each group
+      sck[k+x] = sgk[k+x] || (spk[k+x] && sck[k+x-1]);
+    }
 
     //sck[k] = sgk[k] || (spk[k] && sck[k-1]);
-
+    /*
     sck[k+0] = sgk[k+0] || (spk[k+0] && sscl[k/8]);
     sck[k+1] = sgk[k+1] || (spk[k+1] && (sgk[k+0] || (spk[k+0] && sscl[k/8])));
     sck[k+2] = sgk[k+2] || (spk[k+2] && (sgk[k+1] || (spk[k+1] &&
@@ -451,15 +457,24 @@ void step6() {
       (sgk[k+2] || (spk[k+2] && 
       (sgk[k+1] || (spk[k+1] &&
       (sgk[k+0] || (spk[k+0] && sscl[k/8])))))))))))))));
+    */
+
   }
 }
 
 //Calculate gc_j using gg_j, gp_j, and correct sc_k, k = j div 8 as sectional carry-in for all groups j
 void step7() {
-  int j; 
+  int j;
+  int x;
 
-  for(j=0; j < ngroups; j++) {
+  for(j=0; j < ngroups; j = j + 8) {
+    
+    gcj[j] = ggj[j] || (gpj[j] && sck[j/8]);
+    for(x=1; x<8;x++){  //Each group
+      gcj[j+x] = ggj[j+x] || (gpj[j+x] && gcj[j+x-1]);
+    }
 
+    /*
     gcj[j+0] = ggj[j+0] || (gpj[j+0] && sck[j/8]);
     gcj[j+1] = ggj[j+1] || (gpj[j+1] && (ggj[j+0] || (gpj[j+0] && sck[j/8])));
     gcj[j+2] = ggj[j+2] || (gpj[j+2] && (ggj[j+1] || (gpj[j+1] &&
@@ -489,15 +504,28 @@ void step7() {
       (ggj[j+2] || (gpj[j+2] && 
       (ggj[j+1] || (gpj[j+1] &&
       (ggj[j+0] || (gpj[j+0] && sck[j/8])))))))))))))));
+    */    
+
   }
+
+
+  printf("Step 7: sck:%d, %d\n", sck[0], j);
 }
 
 //Calculate c_i using g_i, p_i, and correct gc_j, j = i div 8 as group carry-in for all bits i
 void step8() {
-  int i; 
+  int i;
+  int x;
 
-  for(i=0; i < bits; i++) {
+  for(i=0; i < bits; i = i + 8) {
 
+    ci[i] = gi[i] || (pi[i] && gcj[i/8]);
+    for(x=1; x<8;x++){  //Each group
+      ci[i+x] = gi[i+x] || (pi[i+x] && ci[i+x-1]);
+    }
+    
+    
+    /*
     ci[i+0] = gi[i+0] || (pi[i+0] && gcj[i/8]);
     ci[i+1] = gi[i+1] || (pi[i+1] && (gi[i+0] || (pi[i+0] && gcj[i/8])));
     ci[i+2] = gi[i+2] || (pi[i+2] && (gi[i+1] || (pi[i+1] &&
@@ -527,8 +555,11 @@ void step8() {
       (gi[i+2] || (pi[i+2] && 
       (gi[i+1] || (pi[i+1] &&
       (gi[i+0] || (pi[i+0] && gcj[i/8])))))))))))))));
+    //I started to regret not just making a sub loop at the end. This code is kinda gross >,<
+    */
   }
-  //I started to regret not just making a sub loop at the end. This code is kinda gross >,<
+
+  printf("Step 8: c=%d g=%d p=%d c-1=%d; %d\n", ci[1], gi[0], pi[0], gcj[0], i);
 }
 
 //Calculate sum_i using a_i * b_i * c_i-1 for all i where * is xor
@@ -543,7 +574,11 @@ void step9() {
   //This would actually be a parallel.
   for(i = 1; i < bits; i++) {
     sumi[i] = bin1[i] ^ bin2[i] ^ ci[i-1];
+    //sumi[i] = gi[i] ^ pi[i] ^ ci[i-1];
   }
+
+  printf("TESTING: sum:%d, %d, %d\n", sumi[0], (gi[0] ^ pi[0]) ^ 0, i);
+  printf("---%d, %d, %d\n", gi[1], pi[1], ci[0]);
 }
 
 
@@ -585,9 +620,14 @@ int main(int argc, char *argv[]){
 
   readInput(argv[1]);
 
+  printf("\nInputs:\n%s\n\n%s\n\n", hex1, hex2);
+  printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
+
   //printf("Test convert to hex:\n%s\n%s\n", convertToHexString(bin1), convertToHexString(bin2));
 
   cla();
+  printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
+
 
   printOutput(); 
   //TODO free/empty things
