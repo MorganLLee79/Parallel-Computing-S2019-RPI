@@ -114,7 +114,7 @@ void convertToNumber(char *inputString, int* result) {
       printf("ERROR: Unrecognized hex: \'%c\' at index %d.\n", inputString[i], i);
     }
 
-    if((/*i % 128 == 0 ||*/ i < 4) && true) { //Only part of the hex. && true for debuging/disabling
+    if((/*i % 128 == 0 ||*/ i < 4) && false) { //Only part of the hex. && true for debuging/disabling
       printf("Converted %c to %d%d%d%d.\n", inputString[i], 
           result[j], result[j-1], result[j-2], result[j-3]);
     }
@@ -123,7 +123,7 @@ void convertToNumber(char *inputString, int* result) {
 
   }
 
-  printf("Finished converting to number, final i:%d final j: %d\n", i, j);
+  //printf("Finished converting to number, final i:%d final j: %d\n", i, j);
 
   //return result;
 }
@@ -171,8 +171,8 @@ void readInput(char *inputFilePath) {
   convertToNumber(hex1, bin1);
   convertToNumber(hex2, bin2);
 
-  printf("bin1: %d%d%d%d \nbin2: %d%d%d%d\n", bin1[4095], bin1[4094], bin1[4093], bin1[4092],
-    bin2[4095], bin2[4094], bin2[4093], bin2[4092]);
+  //printf("bin1: %d%d%d%d \nbin2: %d%d%d%d\n", bin1[4095], bin1[4094], bin1[4093], bin1[4092],
+  //  bin2[4095], bin2[4094], bin2[4093], bin2[4092]);
   
 }
 
@@ -189,7 +189,7 @@ char* convertToHexString(int* inputBinary){
   char temp;
 
   //char* hexSum[digits + 1];
-  char* hexSum = (char *) malloc( (digits + 2) * sizeof(char));
+  char* hexSum = (char *) malloc( (digits + 1) * sizeof(char));
   
   //Iterate up from the expected 
   for(i=0; i < digits; i++) {
@@ -231,9 +231,9 @@ char* convertToHexString(int* inputBinary){
 
   }
 
-  printf("Ended at i:%d, index:%d\n", i, currIndex);
+  //printf("Ended at i:%d, index:%d\n", i, currIndex);
 
-  hexSum[digits+1] = '\0'; //End the string.
+  hexSum[i] = '\0'; //End the string.
 
   return hexSum;
 
@@ -293,6 +293,7 @@ void printOutput(char *filePath) {
   //Print/write to the file
   fprintf(fp, "%s\n", hexString);
   printf("Output:\n%s\n", hexString);
+
   //Alternate: fputs("String", fp); //Just prints to given output stream, no formatting
 
   fclose(fp);
@@ -565,11 +566,11 @@ void step9() {
   //bin1[i] = a_i
   //bin2[i] = b_i
 
-  sumi[i] = bin1[i] || bin2[i] || 0; //0 represents nothing being carried in, since first index
+  sumi[i] = bin1[i] ^ bin2[i] ^ 0; //0 represents nothing being carried in, since first index
 
   //This would actually be a parallel.
   for(i = 1; i < bits; i++) {
-    sumi[i] = bin1[i] || bin2[i] || ci[i-1];
+    sumi[i] = bin1[i] ^ bin2[i] ^ ci[i-1];
   }
 }
 
@@ -608,11 +609,11 @@ void cla() {
 //Example Line: ./leeh17_hw1.c assignment1-testcase.txt
 //Creates output file leeh17_hw1_output.txt
 int main(int argc, char *argv[]){
-  printf("TESTING: Initial Program Open\n");
+  //printf("TESTING: Initial Program Open\n");
 
   readInput(argv[1]);
 
-  printf("%s\n%s\n", convertToHexString(bin1), convertToHexString(bin2));
+  //printf("Test convert to hex:\n%s\n%s\n", convertToHexString(bin1), convertToHexString(bin2));
 
   cla();
 
