@@ -177,19 +177,82 @@ void readInput(char *inputFilePath) {
 }
 
 
-//char* convertToHexString(int* inputNumber){
-  /*int i;  //To traverse 512 bytes
-  int j;  //Traverse 8 bits in byte
-  int k;  //The sum of the bits, turned into base 10
+char* convertToHexString(int* inputNumber){
+  int i;
+  int currIndex;  //Current sum index
 
-  //Go through each byte in the hw1Num
-  for(i = 0; i < 512; i = i + 1){
-    for(j = 0; j<8; j = j + 1) {
+  int a;  //To represent some of the 4 bits' values
+  int b;
+  int c;
+  int d;
+  int byteTotal;
+  char temp;
 
-    take j to power, add to k; multiple times 2^i
+  //char* hexSum[digits + 1];
+  char* hexSum = (char *) malloc( (digits + 2) * sizeof(char));
+  
+  //Iterate up from the expected 
+  for(i=0; i < digits + 1; i++) {
+
+    currIndex = bits - 4*i - 1;
+
+    a = sumi[currIndex - 0];  //Most significant index
+    b = sumi[currIndex - 1];
+    c = sumi[currIndex - 2];
+    d = sumi[currIndex - 3];  //Least significant index
+
+    byteTotal = (8 * a) + (4 * b) + (2 * c) + (1 * d);
+
+    if(byteTotal == 15)        {  temp = 'F';
+    } else if(byteTotal == 14) {  temp = 'E';
+    } else if(byteTotal == 13) {  temp = 'D';
+    } else if(byteTotal == 12) {  temp = 'C';
+    } else if(byteTotal == 11) {  temp = 'B';
+    } else if(byteTotal == 10) {  temp = 'A';
+    } else if(byteTotal == 9)  {  temp = '9';
+    } else if(byteTotal == 8)  {  temp = '8';
+    } else if(byteTotal == 7)  {  temp = '7';
+    } else if(byteTotal == 6)  {  temp = '6';
+    } else if(byteTotal == 5)  {  temp = '5';
+    } else if(byteTotal == 4)  {  temp = '4';
+    } else if(byteTotal == 3)  {  temp = '3';
+    } else if(byteTotal == 2)  {  temp = '2';
+    } else if(byteTotal == 1)  {  temp = '1';
+    } else if(byteTotal == 0)  {  temp = '0';
+    } else {
+      temp = '?';
+      printf("WARNING: Found incorrect byteTotal \'%d\' in convertToHexString()\n.", byteTotal);
+    }
+
+    //Write the new char into our result string
+    hexSum[i] = temp;
+
+  }
+
+  hexSum[digits+1] = '\0'; //End the string.
+
+  return hexSum;
+
+
+/*  //Iterate downwards, from the least to most significant values
+  for(i = digits+1; i > 0; i = i - 1){
+
+    //Hold the current total
+    temp = 0;
+    
+    for(j = 0; j < block_size; j++) { //Go from +0 to +7
+
+      //take j to power, add to k; multiple times 2^i
+
+
 
     }
-  } */
+
+    hexSum[digits-i]
+  } 
+
+  hexSum */
+
 /*
   //Uh, this isn't part of CLA, hopefully it's fine to just use
   char hexOutput[1025];
@@ -203,34 +266,36 @@ void readInput(char *inputFilePath) {
     hexOutput
   }
   
-  return hexOutput;
+  return hexOutput; */
 }
-*/
+
 
 // Takes in the number to be printed out and the file path and name to print to.
 //  The given file will have the number in hexadecimal format
 //Input:  The number we're printing. TODO: Format
 //        The file path/name string to print to. Ex: /here/folder/output.txt
-/*void printOutput(char *filePath) {
+void printOutput(char *filePath) {
 
   FILE *fp;
   char *hexString;
     
   //Make the new file
-  fp = fopen(*filePath, "w+");
+  fp = fopen(filePath, "w+");
 
   //Convert number to usable/printable string
-  hexString = convertToHexString(inputNumber);
+  hexString = convertToHexString(sumi);
   
   
   //Print/write to the file
-  fprintf(fp, hexString);
+  fprintf(fp, "%s\n", hexString);
+  printf("Output:\n%s\n", hexString);
   //Alternate: fputs("String", fp); //Just prints to given output stream, no formatting
 
   fclose(fp);
+  free(hexString);
 
 }
-*/
+
 
 /************** Program ******************/
 
@@ -545,9 +610,9 @@ int main(int argc, char *argv[]){
 
   cla();
 
-  //printOutput(, "leeh17_hw_output.txt");
+  printOutput("leeh17_hw_output.txt");
  
-  //TODO Empty things
+  //TODO free/empty things
   return 1; 
 }
 
