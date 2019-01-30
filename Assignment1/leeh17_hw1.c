@@ -96,7 +96,7 @@ void convertToNumber(char *inputString, int* result) {
       result[j] = 0;  result[j-1] = 1;  result[j-2] = 0;  result[j-3] = 1;
 
     } else if(inputString[i] == '4') { // 0 = 0000
-      result[j] = 0;  result[j-1] = 4;  result[j-2] = 0;  result[j-3] = 0;
+      result[j] = 0;  result[j-1] = 1;  result[j-2] = 0;  result[j-3] = 0;
 
     } else if(inputString[i] == '3') { // 0 = 0000
       result[j] = 0;  result[j-1] = 0;  result[j-2] = 1;  result[j-3] = 1;
@@ -173,6 +173,8 @@ char* convertToHexString(int* inputBinary){
   int byteTotal;
   char temp;
 
+  int warningCount = 0;
+
   //char* hexSum[digits + 1];
   char* hexSum = (char *) malloc( (digits + 1) * sizeof(char));
   
@@ -209,12 +211,26 @@ char* convertToHexString(int* inputBinary){
     } else if(byteTotal == 0)  {  temp = '0';
     } else {
       temp = '?';
-      printf("WARNING: Found incorrect byteTotal \'%d\' in convertToHexString().\n", byteTotal);
+
+      if(warningCount < 4) {
+        printf("WARNING: Found incorrect byteTotal \'%d\' in convertToHexString().\n", byteTotal);
+        printf("  Offending \'byte\': %d%d%d%d\n", a, b, c, d);
+
+        if(warningCount > 3){
+          printf("Too many warnings, suppressing future warnings.\n");
+        }
+      }
+
+      warningCount++;
     }
 
     //Write the new char into our result string
     hexSum[i] = temp;
 
+  }
+
+  if(warningCount > 3){
+    printf("WARNING: %d total warnings.\n", warningCount);
   }
 
   //printf("Ended at i:%d, bin index:%d; started at bin index:%d\n", i, currIndex-3, bits - 1);
@@ -299,6 +315,7 @@ void step2() {
 
     if(i > bits) { printf("WARNING: step2, i surpassed bits! It is now: %d.\n", i); }
   }
+
 }
 
 //Calculate sg_k and sp_k for all 64 sections k using ggj and gpj (larger subsections)
@@ -531,8 +548,6 @@ void step8() {
   for(i=0; i < bits; i = i + 8) {
 
     ci[i] = gi[i] || (pi[i] && gcj[i/8]);
-
-    
     for(x=1; x<8;x++){  //Each group
       ci[i+x] = gi[i+x] || (pi[i+x] && ci[i+x-1]);
     }
@@ -595,10 +610,12 @@ void step9() {
     //sumi[i] = gi[i] ^ pi[i] ^ ci[i-1];
   }
 
-  /*printf("TESTING: sum:%d, %d, %d\n", sumi[i-1], bits, i);
-  printf("%d%d%d%d%d%d%d%d %d%d%d%d%d%d%d%d\n", 
+  /*
+  printf("TESTING: sum:%d, %d, %d\n", sumi[i-1], bits, i);
+  printf("%d%d%d%d %d%d%d%d %d%d%d%d %d%d%d%d\n", 
     sumi[i-1], sumi[i-2], sumi[i-3], sumi[i-4], sumi[i-5], sumi[i-6], sumi[i-7], sumi[i-8],
     sumi[i-9], sumi[i-10], sumi[i-11], sumi[i-12], sumi[i-13], sumi[i-14], sumi[i-15], sumi[i-16]);
+  printf("%d %d %d\n", bin1[i-6], bin2[i-6], ci[i-7]);
   */
 
   //for(i=0;i<bits;i++){ printf("%d", sumi[i]);
@@ -682,7 +699,7 @@ int main(int argc, char *argv[]){
 
   readInput(argv[1]);
 
-  //printf("\nInputs:\n%s\n\n%s\n\n", hex1, hex2);
+  printf("\nInputs:\n%s\n\n%s\n\n", hex1, hex2);
   //printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
 
   //printf("Test convert to hex:\n%s\n%s\n", convertToHexString(bin1), convertToHexString(bin2));
@@ -690,7 +707,7 @@ int main(int argc, char *argv[]){
   cla();
   //printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
 
-  //simpleRippleCarryTest();
+  simpleRippleCarryTest();
   //relationsTests();
 
   printOutput(); 
