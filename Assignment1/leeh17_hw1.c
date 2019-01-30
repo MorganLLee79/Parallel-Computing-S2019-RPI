@@ -351,10 +351,11 @@ void step3() {
 
     spk[j] = gpj[j+7] && gpj[j+6] && gpj[j+5] && gpj[j+4] && gpj[j+3] && gpj[j+2] && gpj[j+1] && gpj[j];
 
+    if(j >= ngroups) { printf("WARNING: step3, j surpassed ngroups! It is now: %d.\n", j); }
+
     //Iterate/manage j as well.
     j = j + 8;
 
-    if(j > ngroups) { printf("WARNING: step3, j surpassed ngroups! It is now: %d.\n", j); }
   }
 }
 
@@ -387,11 +388,11 @@ void step4() {
     sspl[l] = spk[k+7] && spk[k+6] && spk[k+5] && spk[k+4] && 
               spk[k+3] && spk[k+2] && spk[k+1] && spk[k];
 
+    if(k >= nsections) { printf("WARNING: step4, k surpassed nsections! It is now: %d.\n", k); }
 
     //Iterate/manage k as well.
     k = k + 8;
 
-    if(k > nsections) { printf("WARNING: step4, k surpassed nsections! It is now: %d.\n", k); }
   }
 }
 
@@ -404,31 +405,38 @@ void step5() {
   sscl[0] = ssgl[0] || (sspl[0] && 0);
 
   //And now, doing the other 7 super sections.
-  sscl[1] = ssgl[1] || (sspl[1] && (ssgl[0] || (sspl[0] && 0)));
-  sscl[2] = ssgl[2] || (sspl[2] && (ssgl[1] || (sspl[1] &&
+  sscl[1] = ssgl[1] || (sspl[1] &&
+    (ssgl[0] || (sspl[0] && 0)));
+  sscl[2] = ssgl[2] || (sspl[2] &&
+    (ssgl[1] || (sspl[1] &&
     (ssgl[0] || (sspl[0] && 0)))));
-  sscl[3] = ssgl[3] || (sspl[2] && (ssgl[2] || (sspl[2] && 
+  sscl[3] = ssgl[3] || (sspl[3] &&
+    (ssgl[2] || (sspl[2] && 
     (ssgl[1] || (sspl[1] &&
     (ssgl[0] || (sspl[0] && 0)))))));
-  sscl[4] = ssgl[4] || (sspl[3] && (ssgl[3] || (sspl[2] && 
+  sscl[4] = ssgl[4] || (sspl[4] &&
+    (ssgl[3] || (sspl[3] && 
     (ssgl[2] || (sspl[2] && 
     (ssgl[1] || (sspl[1] &&
     (ssgl[0] || (sspl[0] && 0)))))))));
-  sscl[5] = ssgl[5] || (sspl[4] && (ssgl[4] || (sspl[3] && 
-    (ssgl[3] || (sspl[2] && 
+  sscl[5] = ssgl[5] || (sspl[5] &&
+    (ssgl[4] || (sspl[4] && 
+    (ssgl[3] || (sspl[3] && 
     (ssgl[2] || (sspl[2] && 
     (ssgl[1] || (sspl[1] &&
     (ssgl[0] || (sspl[0] && 0)))))))))));
-  sscl[6] = ssgl[6] || (sspl[6] && (ssgl[5] || (sspl[4] &&
-    (ssgl[4] || (sspl[3] && 
-    (ssgl[3] || (sspl[2] && 
+  sscl[6] = ssgl[6] || (sspl[6] &&
+    (ssgl[5] || (sspl[5] &&
+    (ssgl[4] || (sspl[4] && 
+    (ssgl[3] || (sspl[3] && 
     (ssgl[2] || (sspl[2] && 
     (ssgl[1] || (sspl[1] &&
     (ssgl[0] || (sspl[0] && 0)))))))))))));
-  sscl[7] = ssgl[7] || (sspl[7] && (ssgl[6] || (sspl[6] && 
-    (ssgl[5] || (sspl[4] &&
-    (ssgl[4] || (sspl[3] && 
-    (ssgl[3] || (sspl[2] && 
+  sscl[7] = ssgl[7] || (sspl[7] &&
+    (ssgl[6] || (sspl[6] && 
+    (ssgl[5] || (sspl[5] &&
+    (ssgl[4] || (sspl[4] && 
+    (ssgl[3] || (sspl[3] && 
     (ssgl[2] || (sspl[2] && 
     (ssgl[1] || (sspl[1] &&
     (ssgl[0] || (sspl[0] && 0)))))))))))))));
@@ -449,6 +457,8 @@ void step6() {
 
   for(k=0; k < nsections; k = k + 8) {
     
+    //if(k < 30) {printf("step6: %d %d, %d\n", k, sscl[k/8], k/8); }
+
     sck[k] = sgk[k] || (spk[k] && sscl[k/8]);
     for(x=1; x<8;x++){  //Each group
       sck[k+x] = sgk[k+x] || (spk[k+x] && sck[k+x-1]);
@@ -497,6 +507,8 @@ void step7() {
 
   for(j=0; j < ngroups; j = j + 8) {
     
+    //if(j < 30) {printf("step7: %d %d, %d\n", j, sck[j/8], j+x); }
+
     gcj[j] = ggj[j] || (gpj[j] && sck[j/8]);
     for(x=1; x<8;x++){  //Each group
       gcj[j+x] = ggj[j+x] || (gpj[j+x] && gcj[j+x-1]);
@@ -546,6 +558,8 @@ void step8() {
   int x;
 
   for(i=0; i < bits; i = i + 8) {
+
+    //if(i < 30) {printf("step8: %d %d, %d\n", i, gcj[i/8], i+x); }
 
     ci[i] = gi[i] || (pi[i] && gcj[i/8]);
     for(x=1; x<8;x++){  //Each group
@@ -699,7 +713,7 @@ int main(int argc, char *argv[]){
 
   readInput(argv[1]);
 
-  printf("\nInputs:\n%s\n\n%s\n\n", hex1, hex2);
+  //printf("\nInputs:\n%s\n\n%s\n\n", hex1, hex2);
   //printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
 
   //printf("Test convert to hex:\n%s\n%s\n", convertToHexString(bin1), convertToHexString(bin2));
@@ -707,7 +721,7 @@ int main(int argc, char *argv[]){
   cla();
   //printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
 
-  simpleRippleCarryTest();
+  //simpleRippleCarryTest();
   //relationsTests();
 
   printOutput(); 
