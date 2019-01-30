@@ -190,7 +190,7 @@ char* convertToHexString(int* inputBinary){
 
     byteTotal = (8 * a) + (4 * b) + (2 * c) + (1 * d);
 
-    //if(i>digits-8) {
+    //if(i > digits - 20) {
     //  printf("%d%d%d%d, at index %d, byte total: %d\n", a, b, c, d, currIndex, byteTotal); }
 
     if(byteTotal == 15)        {  temp = 'F';
@@ -277,15 +277,20 @@ void step1() {
 
   //printf("TEST XOR: %d, %d, %d, %d\n", 0^0, 1^0,0^1,1^1);
 
-  //xor things together
   for(i = 0; i < bits; i++){
     gi[i] = bin1[i] && bin2[i]; //g_i = a_i and b_i
     pi[i] = bin1[i] || bin2[i];
-    //ci[i] = gi[i] || (pi[i] && ci[i-1]); //TODO properly use ci?
   }
 
-  //printf("%d-%d-%d-%d--%d-\n", gi[i], pi[i], bin1[i], bin2[i], gi[bits-1]);
+  //printf("%d-%d-%d-%d--%d-\n", gi[0], pi[0], bin1[0], bin2[0], gi[bits-1]);
   //printf("step 1: %d, %d\n", gi[i-1], pi[i-1]);
+  
+  /*for(i=0; i<40;i++) { printf("%d", bin1[i]); }
+  printf("\n");
+  for(i=0; i<40;i++) { printf("%d", bin2[i]); }
+  printf("\n");
+  for(i=0; i<40;i++) { printf("%d", pi[i]); }
+  printf("\n"); */
 }
 
 
@@ -302,20 +307,25 @@ void step2() {
     ggj[j] = gi[i+7]
       || (gi[i+6] && pi[i+7])
       || (gi[i+5] && pi[i+7] && pi[i+6])
-      || (gi[i+4] && pi[i+7] && pi[i+6] && pi[i+5]
+      || (gi[i+4] && pi[i+7] && pi[i+6] && pi[i+5])
       || (gi[i+3] && pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4])
       || (gi[i+2] && pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4] && pi[i+3])
       || (gi[i+1] && pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4] && pi[i+3] && pi[i+2])
-      || (gi[i]   && pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4] && pi[i+3] && pi[i+2] && pi[i+1]));
+      || (gi[i]   && pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4] && pi[i+3] && pi[i+2] && pi[i+1]);
 
-    gpj[j] = pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4] && pi[i+3] && pi[i+2] && pi[i+1] && pi[i];
+    gpj[j] = pi[i+7] || pi[i+6] || pi[i+5] || pi[i+4] || pi[i+3] || pi[i+2] || pi[i+1] || pi[i];
 
     //Iterate/manage i as well.
     i = i + 8;
 
-    if(i > bits) { printf("WARNING: step2, i surpassed bits! It is now: %d.\n", i); }
+    if(i > bits) { printf("WARNING: In step2, i surpassed bits! It is now: %d.\n", i); }
   }
 
+  /*
+  for(j=0;j<ngroups;j++) { printf("%d", gpj[j]); }
+  printf("-\nP:");
+  for(i=3576;i<3592;i++) { printf("%d", pi[i]); }
+  printf("\n"); */
 }
 
 //Calculate sg_k and sp_k for all 64 sections k using ggj and gpj (larger subsections)
@@ -340,23 +350,28 @@ void step3() {
     sgk[k] = ggj[j+7]
       || (ggj[j+6] && gpj[j+7])
       || (ggj[j+5] && gpj[j+7] && gpj[j+6])
-      || (ggj[j+4] && gpj[j+7] && gpj[j+6] && gpj[j+5]
+      || (ggj[j+4] && gpj[j+7] && gpj[j+6] && gpj[j+5])
       || (ggj[j+3] && gpj[j+7] && gpj[j+6] && gpj[j+5] && gpj[j+4])
       || (ggj[j+2] && gpj[j+7] && gpj[j+6] && gpj[j+5] && gpj[j+4] && 
             gpj[j+3])
       || (ggj[j+1] && gpj[j+7] && gpj[j+6] && gpj[j+5] && gpj[j+4] && 
             gpj[j+3] && gpj[j+2])
       || (ggj[j]   && gpj[j+7] && gpj[j+6] && gpj[j+5] && gpj[j+4] && 
-            gpj[j+3] && gpj[j+2] && gpj[j+1]));
+            gpj[j+3] && gpj[j+2] && gpj[j+1]);
 
-    spk[j] = gpj[j+7] && gpj[j+6] && gpj[j+5] && gpj[j+4] && gpj[j+3] && gpj[j+2] && gpj[j+1] && gpj[j];
+    spk[k] = gpj[j+7] || gpj[j+6] || gpj[j+5] || gpj[j+4] || gpj[j+3] || gpj[j+2] || gpj[j+1] || gpj[j];
 
-    if(j >= ngroups) { printf("WARNING: step3, j surpassed ngroups! It is now: %d.\n", j); }
+    if(j >= ngroups) { printf("WARNING: In step3, j surpassed ngroups! It is now: %d.\n", j); }
 
     //Iterate/manage j as well.
     j = j + 8;
 
   }
+
+  /*
+  printf("step3:");
+  for(k=0;k<nsections;k++) { printf("%d", spk[k]); }
+  printf("\n"); */
 }
 
 
@@ -376,36 +391,44 @@ void step4() {
     ssgl[l] = sgk[k+7]
       || (sgk[k+6] && spk[k+7])
       || (sgk[k+5] && spk[k+7] && spk[k+6])
-      || (sgk[k+4] && spk[k+7] && spk[k+6] && spk[k+5]
+      || (sgk[k+4] && spk[k+7] && spk[k+6] && spk[k+5])
       || (sgk[k+3] && spk[k+7] && spk[k+6] && spk[k+5] && spk[k+4])
       || (sgk[k+2] && spk[k+7] && spk[k+6] && spk[k+5] && spk[k+4] && 
             spk[k+3])
       || (sgk[k+1] && spk[k+7] && spk[k+6] && spk[k+5] && spk[k+4] && 
             spk[k+3] && spk[k+2])
       || (sgk[k]   && spk[k+7] && spk[k+6] && spk[k+5] && spk[k+4] && 
-            spk[k+3] && spk[k+2] && spk[k+1]));
+            spk[k+3] && spk[k+2] && spk[k+1]);
 
-    sspl[l] = spk[k+7] && spk[k+6] && spk[k+5] && spk[k+4] && 
-              spk[k+3] && spk[k+2] && spk[k+1] && spk[k];
+    sspl[l] = spk[k+7] || spk[k+6] || spk[k+5] || spk[k+4] || 
+              spk[k+3] || spk[k+2] || spk[k+1] || spk[k];
 
-    if(k >= nsections) { printf("WARNING: step4, k surpassed nsections! It is now: %d.\n", k); }
+    if(k >= nsections) { printf("WARNING: In step4, k surpassed nsections! It is now: %d.\n", k); }
 
     //Iterate/manage k as well.
     k = k + 8;
 
   }
+
+  /*  
+  printf("step4:");
+  for(l=0;l<nsupersections;l++) { printf("%d", sspl[l]); }
+  printf("\n");
+  */
+
 }
 
 
 //Calculate ssc_l using ssg_l and ssp_l for all l super sections and 0 for ssc_-1
 void step5() {
-  //int l;
+  int l;
 
   //ssc_-1 = 0
   sscl[0] = ssgl[0] || (sspl[0] && 0);
+  //printf("-----ssgl:%d\n", ssgl[0]);
 
   //And now, doing the other 7 super sections.
-  sscl[1] = ssgl[1] || (sspl[1] &&
+  /*sscl[1] = ssgl[1] || (sspl[1] &&
     (ssgl[0] || (sspl[0] && 0)));
   sscl[2] = ssgl[2] || (sspl[2] &&
     (ssgl[1] || (sspl[1] &&
@@ -439,13 +462,14 @@ void step5() {
     (ssgl[3] || (sspl[3] && 
     (ssgl[2] || (sspl[2] && 
     (ssgl[1] || (sspl[1] &&
-    (ssgl[0] || (sspl[0] && 0)))))))))))))));
+    (ssgl[0] || (sspl[0] && 0)))))))))))))));*/
 
-  /* Not using for loop to partially simulate parallelism. Below should be effective the same
+  // Not using for loop to partially simulate parallelism. Below should be effective the same
   for(l=1; l < nsupersections; l++) {
 
     sscl[l] = ssgl[l] || (sspl[l] && sscl[l-1]);
-  }*/
+//    printf("step5: %d->%d; %d, %d\n", l, sscl[l], ssgl[l], sspl[l]);
+  }
 }
 
 
@@ -498,6 +522,8 @@ void step6() {
     */
 
   }
+
+  //printf("step6:_sck[56]:%d %d, %d, %d.\n", sck[56], sgk[56], spk[56], sscl[7]);
 }
 
 //Calculate gc_j using gg_j, gp_j, and correct sc_k, k = j div 8 as sectional carry-in for all groups j
@@ -507,11 +533,15 @@ void step7() {
 
   for(j=0; j < ngroups; j = j + 8) {
     
-    //if(j < 30) {printf("step7: %d %d, %d\n", j, sck[j/8], j+x); }
+//    if(j > 430 && j < 460) {printf("step7:_%d %d, %d, %d.\n", j, ggj[j], gpj[j], sck[j/8]); }
 
     gcj[j] = ggj[j] || (gpj[j] && sck[j/8]);
     for(x=1; x<8;x++){  //Each group
       gcj[j+x] = ggj[j+x] || (gpj[j+x] && gcj[j+x-1]);
+
+
+//      if(j > 430 && j < 460) {printf("step7: %d %d, %d, %d.\n", 
+//         j+x, ggj[j+x], gpj[j+x], gcj[j+x-1]); }
     }
 
     /*
@@ -559,11 +589,13 @@ void step8() {
 
   for(i=0; i < bits; i = i + 8) {
 
-    //if(i < 30) {printf("step8: %d %d, %d\n", i, gcj[i/8], i+x); }
+//    if(i < 3588 && i > 3560) {printf("step8:_%d %d, %d\n", i, gcj[i/8], i+x); }
 
     ci[i] = gi[i] || (pi[i] && gcj[i/8]);
     for(x=1; x<8;x++){  //Each group
       ci[i+x] = gi[i+x] || (pi[i+x] && ci[i+x-1]);
+
+//      if(i < 3588 && i > 3560) {printf("step8: %d %d, %d\n", i+x, ci[i+x], i+x); }
     }
     
     
@@ -622,15 +654,20 @@ void step9() {
   for(i = 1; i < bits; i++) {
     sumi[i] = bin1[i] ^ bin2[i] ^ ci[i-1];
     //sumi[i] = gi[i] ^ pi[i] ^ ci[i-1];
+
+//    if(i < 3588 && i > 3580) {
+//      printf("%d: %d %d %d, i=%d\n", sumi[i], bin1[i], bin2[i], ci[i-1], i); }
+      //ci[3584] is failiing?
   }
 
   /*
+  i = 48;
   printf("TESTING: sum:%d, %d, %d\n", sumi[i-1], bits, i);
   printf("%d%d%d%d %d%d%d%d %d%d%d%d %d%d%d%d\n", 
     sumi[i-1], sumi[i-2], sumi[i-3], sumi[i-4], sumi[i-5], sumi[i-6], sumi[i-7], sumi[i-8],
     sumi[i-9], sumi[i-10], sumi[i-11], sumi[i-12], sumi[i-13], sumi[i-14], sumi[i-15], sumi[i-16]);
-  printf("%d %d %d\n", bin1[i-6], bin2[i-6], ci[i-7]);
-  */
+  printf("%d %d %d\n", bin1[i-6], bin2[i-6], ci[i-7]);*/
+  
 
   //for(i=0;i<bits;i++){ printf("%d", sumi[i]);
   //} printf("\n");
@@ -709,6 +746,7 @@ void relationsTests(){
 //Example Line: ./leeh17_hw1.c assignment1-testcase.txt
 //Creates output file leeh17_hw1_output.txt
 int main(int argc, char *argv[]){
+  //int i;
   //printf("TESTING: Initial Program Open\n");
 
   readInput(argv[1]);
@@ -723,6 +761,8 @@ int main(int argc, char *argv[]){
 
   //simpleRippleCarryTest();
   //relationsTests();
+  //for(i=0;i<ngroups;i++) { printf("%d", gpj[i]); }
+  //printf("\n");
 
   printOutput(); 
   //TODO free/empty things
