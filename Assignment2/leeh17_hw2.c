@@ -7,8 +7,8 @@
 /***** Data Structures (Provided) *********/
 
 // EXAMPLE DATA STRUCTURE DESIGN AND LAYOUT FOR CLA
-#define input_size 1024
-#define block_size 8
+#define input_size 1048576    //New input size, 1 million bits
+#define block_size 32         //New block size, 32 bit blocks and 32 MPI ranks
 
 //Do not touch these defines
 #define digits (input_size+1)                 //1025
@@ -300,11 +300,13 @@ void step2() {
   //ggj = (int *) malloc( (bits) * sizeof(int));
   //gpj = (int *) malloc( (bits) * sizeof(int));
 
+  int tempPropagates[bits] = {0};
+  int x;
   int j;
   int i = 0;
 
   for(j=0; j < ngroups; j++) {
-    ggj[j] = gi[i+7]
+    /*ggj[j] = gi[i+7]
       || (gi[i+6] && pi[i+7])
       || (gi[i+5] && pi[i+7] && pi[i+6])
       || (gi[i+4] && pi[i+7] && pi[i+6] && pi[i+5])
@@ -313,12 +315,27 @@ void step2() {
       || (gi[i+1] && pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4] && pi[i+3] && pi[i+2])
       || (gi[i]   && pi[i+7] && pi[i+6] && pi[i+5] && pi[i+4] && pi[i+3] && pi[i+2] && pi[i+1]);
 
-    gpj[j] = pi[i+7] || pi[i+6] || pi[i+5] || pi[i+4] || pi[i+3] || pi[i+2] || pi[i+1] || pi[i];
+    gpj[j] = pi[i+7] || pi[i+6] || pi[i+5] || pi[i+4] || pi[i+3] || pi[i+2] || pi[i+1] || pi[i]; */
 
-    //Iterate/manage i as well.
-    i = i + 8;
+    tempGG = 0;
+    tempPropagates[bits-1] = 1 //Default to true in order to ignore in ands
+    tempGP = pi[i];
+    for(x = bits-2; x > 0; x = x - 1) { //Iterate through the block backwards
+      tempPropagates[x] = tempPropagates[x+1] && pi[i+x];
+    }
 
-    if(i > bits) { printf("WARNING: In step2, i surpassed bits! It is now: %d.\n", i); }
+    for(x = 0; x < bits; x++) {
+      tempGG = tempGG || (tempPropagates[x] && gi[i+x]);
+      tempGP = tempGP || pi[i+x];
+    }
+
+    ggj[j] = tempGG;
+    gpj[j] = tempGP;
+
+    //Iterate/manage i as well. i represents the base index of this block
+    i = i + bits;
+
+    //if(i > bits) { printf("WARNING: In step2, i surpassed bits! It is now: %d.\n", i); }
   }
 
   /*
@@ -334,6 +351,9 @@ void step3() {
   //sgk = (int *) malloc( (bits) * sizeof(int));
   //spk = (int *) malloc( (bits) * sizeof(int));
 
+  int tempPropagates[bits] = {0};
+  int x;
+
   int k;
   int j = 0;
 
@@ -347,6 +367,7 @@ void step3() {
 
     //Iterate/manage j as well.
     j = j + 4; */
+    /*
     sgk[k] = ggj[j+7]
       || (ggj[j+6] && gpj[j+7])
       || (ggj[j+5] && gpj[j+7] && gpj[j+6])
@@ -361,10 +382,27 @@ void step3() {
 
     spk[k] = gpj[j+7] || gpj[j+6] || gpj[j+5] || gpj[j+4] || gpj[j+3] || gpj[j+2] || gpj[j+1] || gpj[j];
 
-    if(j >= ngroups) { printf("WARNING: In step3, j surpassed ngroups! It is now: %d.\n", j); }
+    if(j >= ngroups) { printf("WARNING: In step3, j surpassed ngroups! It is now: %d.\n", j); } */
+
+    tempSG = 0;
+    tempPropagates[bits-1] = 1 //Default to true in order to ignore in ands
+    tempSP = gpj[j];
+    for(x = bits-2; x > 0; x = x - 1) { //Iterate through the block backwards
+      tempPropagates[x] = tempPropagates[x+1] && gpj[j+x];
+    }
+
+    //TODO save array of propagate sets, and in?
+    for(x = 0; x < bits; x++) {
+      //Temps represent the sum of all earlier values
+      tempSG = tempSG || (tempPropagates[x] && ggj[j+x]);
+      tempSP = tempSP || gpj[j+x];
+    }
+
+    sgk[j] = tempSG;
+    spk[j] = tempSP;
 
     //Iterate/manage j as well.
-    j = j + 8;
+    j = j + bits;
 
   }
 
@@ -387,7 +425,7 @@ void step4() {
       || (sgk[k]   && spk[k+3] && spk[k+2] && spk[k+1]);
 
     sspl[l] = spk[k+3] && spk[k+2] && spk[k+1] && spk[k]; */
-
+    /*
     ssgl[l] = sgk[k+7]
       || (sgk[k+6] && spk[k+7])
       || (sgk[k+5] && spk[k+7] && spk[k+6])
@@ -404,9 +442,27 @@ void step4() {
               spk[k+3] || spk[k+2] || spk[k+1] || spk[k];
 
     if(k >= nsections) { printf("WARNING: In step4, k surpassed nsections! It is now: %d.\n", k); }
+    */
+
+    tempSSG = 0;
+    tempPropagates[bits-1] = 1 //Default to true in order to ignore in ands
+    tempSSP = spk[k];
+    for(x = bits-2; x > 0; x = x - 1) { //Iterate through the block backwards
+      tempPropagates[x] = tempPropagates[x+1] && spk[k+x];
+    }
+
+    //TODO save array of propagate sets, and in?
+    for(x = 0; x < bits; x++) {
+      //Temps represent the sum of all earlier values
+      tempSSG = tempSSG || (tempPropagates[x] && sgk[k+x]);
+      tempSSP = tempSSP || spk[k+x];
+    }
+
+    ssgl[j] = tempSSG;
+    sspl[j] = tempSSP;
 
     //Iterate/manage k as well.
-    k = k + 8;
+    k = k + bits;
 
   }
 
@@ -479,18 +535,18 @@ void step6() {
   int k;
   int x;
 
-  for(k=0; k < nsections; k = k + 8) {
+  for(k=0; k < nsections; k = k + bits) {
     
-    //if(k < 30) {printf("step6: %d %d, %d\n", k, sscl[k/8], k/8); }
+    //if(k < 30) {printf("step6: %d %d, %d\n", k, sscl[k/bits], k/bits); }
 
-    sck[k] = sgk[k] || (spk[k] && sscl[k/8]);
-    for(x=1; x<8;x++){  //Each group
+    sck[k] = sgk[k] || (spk[k] && sscl[k/bits]);
+    for(x=1; x<bits;x++){  //Each group
       sck[k+x] = sgk[k+x] || (spk[k+x] && sck[k+x-1]);
     }
 
     //sck[k] = sgk[k] || (spk[k] && sck[k-1]);
     /*
-    sck[k+0] = sgk[k+0] || (spk[k+0] && sscl[k/8]);
+    sck[k+0] = sgk[k+0] || (spk[k+0] && sscl[k/bits]);
     sck[k+1] = sgk[k+1] || (spk[k+1] && (sgk[k+0] || (spk[k+0] && sscl[k/8])));
     sck[k+2] = sgk[k+2] || (spk[k+2] && (sgk[k+1] || (spk[k+1] &&
       (sgk[k+0] || (spk[k+0] && sscl[k/8])))));
@@ -531,12 +587,12 @@ void step7() {
   int j;
   int x;
 
-  for(j=0; j < ngroups; j = j + 8) {
+  for(j=0; j < ngroups; j = j + bits) {
     
 //    if(j > 430 && j < 460) {printf("step7:_%d %d, %d, %d.\n", j, ggj[j], gpj[j], sck[j/8]); }
 
-    gcj[j] = ggj[j] || (gpj[j] && sck[j/8]);
-    for(x=1; x<8;x++){  //Each group
+    gcj[j] = ggj[j] || (gpj[j] && sck[j/bits]);
+    for(x=1; x<bits;x++){  //Each group
       gcj[j+x] = ggj[j+x] || (gpj[j+x] && gcj[j+x-1]);
 
 
@@ -587,15 +643,15 @@ void step8() {
   int i;
   int x;
 
-  for(i=0; i < bits; i = i + 8) {
+  for(i=0; i < bits; i = i + bits) {
 
-//    if(i < 3588 && i > 3560) {printf("step8:_%d %d, %d\n", i, gcj[i/8], i+x); }
+//    if(i < 3550 && i > 3560) {printf("stepbits:_%d %d, %d\n", i, gcj[i/bits], i+x); }
 
-    ci[i] = gi[i] || (pi[i] && gcj[i/8]);
-    for(x=1; x<8;x++){  //Each group
+    ci[i] = gi[i] || (pi[i] && gcj[i/bits]);
+    for(x=1; x<bits;x++){  //Each group
       ci[i+x] = gi[i+x] || (pi[i+x] && ci[i+x-1]);
 
-//      if(i < 3588 && i > 3560) {printf("step8: %d %d, %d\n", i+x, ci[i+x], i+x); }
+//      if(i < 35bits8 && i > 3560) {printf("step8: %d %d, %d\n", i+x, ci[i+x], i+x); }
     }
     
     
