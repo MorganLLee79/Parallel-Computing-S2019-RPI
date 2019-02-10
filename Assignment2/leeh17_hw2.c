@@ -11,11 +11,11 @@
 #define block_size 32         //New block size, 32 bit blocks and 32 MPI ranks
 
 //Do not touch these defines
-#define digits (input_size+1)                 //1025
-#define bits digits * 4                       //4100
-#define ngroups bits/block_size               //512
-#define nsections ngroups/block_size          //64
-#define nsupersections nsections/block_size   //8
+#define digits (input_size+1)                 //1,048,577
+#define bits digits * 4                       //4,194,308
+#define ngroups bits/block_size               //131072 + 1
+#define nsections ngroups/block_size          //4096   + 1
+#define nsupersections nsections/block_size   //128    + 1
 
 //Global definitions of the various arrays used in steps for easy access
 int gi[bits] = {0};
