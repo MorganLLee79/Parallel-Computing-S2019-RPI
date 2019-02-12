@@ -19,8 +19,11 @@ FILE *my_output_file=NULL;
 char hex_input_a[HEX_INPUT_SIZE+1]={0};
 char hex_input_b[HEX_INPUT_SIZE+1]={0};
 
-int main(int argc, char** argv)
-{
+int main(int argc, char** argv) {
+
+  int test[9] = {1,2,3,4,5,6,7,8,9};
+  int receiver[2];
+
   int my_mpi_size = -1;
   int my_mpi_rank = -1;
   MPI_Init( &argc, &argv);
@@ -56,8 +59,13 @@ int main(int argc, char** argv)
     }
   
   MPI_Barrier(MPI_COMM_WORLD);
+  printf("Rank %d/%d: Hello World. init;\n", my_mpi_rank, my_mpi_size);
 
-  printf("Rank %d: Hello World \n", my_mpi_rank);
+  MPI_Scatter(test, (9/4), MPI_INT, &receiver, (9/4), MPI_INT, 0, MPI_COMM_WORLD);
+
+  printf("Rank %d/%d: Hello World. Test = %d, %d \n", my_mpi_rank, 
+  	my_mpi_size, //test[(9/4)*my_mpi_rank], test[(9/4*my_mpi_rank)+1]);
+  	receiver[0], receiver[1]);
 
   MPI_Finalize();
 }

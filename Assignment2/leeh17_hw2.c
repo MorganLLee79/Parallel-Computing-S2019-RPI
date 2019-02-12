@@ -6,16 +6,34 @@
 
 /***** Data Structures (Provided) *********/
 
+//----From mpi_cla_io
+// Compile Code: mpicc -g -Wall mpi-cla-io.c -o mpi-cla-io
+// Example Run Code: mpirun -np 4 ./mpi-cla-io test_input_1.txt test_output_1.txt
+// Both input and output files will 524490 bytes in size. The two additional
+//    characters are due to a newline characters between each input and at the
+//    end of the file.
+
+
+#define HEX_INPUT_SIZE 262144
+
+FILE *my_input_file=NULL;
+FILE *my_output_file=NULL;
+
+// Add 1 to array size because strings must be null terminated
+char hex_input_a[HEX_INPUT_SIZE+1]={0};
+char hex_input_b[HEX_INPUT_SIZE+1]={0};
+//----From mpi_cla_io
+
 // EXAMPLE DATA STRUCTURE DESIGN AND LAYOUT FOR CLA
-#define input_size 1048576    //New input size, 1 million bits
+#define input_size 262144    //New input size, 1 million bits
 #define block_size 32         //New block size, 32 bit blocks and 32 MPI ranks
 
 //Do not touch these defines
-#define digits (input_size+1)                 //1,048,577
-#define bits digits * 4                       //4,194,308
-#define ngroups bits/block_size               //131072 + 1
-#define nsections ngroups/block_size          //4096   + 1
-#define nsupersections nsections/block_size   //128    + 1
+#define digits (input_size+1)                 //   262,145
+#define bits digits * 4                       //i, 1,048,580
+#define ngroups bits/block_size               //j, 32,768 +1?
+#define nsections ngroups/block_size          //k, 1024
+#define nsupersections nsections/block_size   //l, 32
 
 //Global definitions of the various arrays used in steps for easy access
 int gi[bits] = {0};
@@ -40,6 +58,9 @@ int sumi[bits] = {0};
 int* bin1 = NULL;
 int* bin2 = NULL;
 
+//int startIndex;
+//int endIndex;
+
 //Character array of inputs in hex form
 char* hex1 = NULL;
 char* hex2 = NULL;
@@ -56,7 +77,7 @@ void convertToNumber(char *inputString, int* result) {
   int j;  //Track binary index
 
   j = bits-1;
-
+  printf("Converting to number\n");
   //Iterate through the string
   for(i = 0; i < digits; i++) {
 
@@ -136,21 +157,19 @@ void readInput(char *inputFilePath) {
   bin1 = (int *) malloc( (bits) * sizeof(int));
   bin2 = (int *) malloc( (bits) * sizeof(int));
 
-  hex1 = (char *) malloc( (digits+1) * sizeof(char));
+  hex1 = (char *) malloc( (digits+1) * sizeof(char)); //+1 to account for \0
   hex2 = (char *) malloc( (digits+1) * sizeof(char));
 
-
   //Read from file into hex1 and hex2
-  scanf("%s", hex1 + sizeof(char));
+  scanf("%s %s", hex1 + sizeof(char), hex2 + sizeof(char));
   hex1[0] = '0';        //Add leading 0
   hex1[digits] = '\0';  //Add null terminator
 
-  scanf("%s", hex2 + sizeof(char));
   hex2[0] = '0';
   hex2[digits] = '\0';
 
   //printf("TEST: %ld\n%s\n", strlen(hex2), hex2);
-  //printf("Read numbers:\n%s\n%s\n", hex1, hex2);
+  printf("Read numbers:\n%s\n%s\n", hex1+digits-10, hex2+digits-10);
   
   //Convert the two hexadecimal strings into usable numbers, saving to globals bin1/2
   convertToNumber(hex1, bin1);
@@ -259,7 +278,8 @@ void printOutput() {
   //printf("\n");
 
   //Print
-  printf("%s\n", hexString);
+
+  printf("%s-Last 40 bits\n", hexString + input_size-40);
 
   free(hexString);
 }
@@ -285,12 +305,13 @@ void step1() {
   //printf("%d-%d-%d-%d--%d-\n", gi[0], pi[0], bin1[0], bin2[0], gi[bits-1]);
   //printf("step 1: %d, %d\n", gi[i-1], pi[i-1]);
   
-  /*for(i=0; i<40;i++) { printf("%d", bin1[i]); }
+  /*
+  for(i=0; i<64;i++) { printf("%d", bin1[i]); }
   printf("\n");
-  for(i=0; i<40;i++) { printf("%d", bin2[i]); }
-  printf("\n");
-  for(i=0; i<40;i++) { printf("%d", pi[i]); }
-  printf("\n"); */
+  for(i=0; i<64;i++) { printf("%d", bin2[i]); }
+  printf("\n");*/
+  for(i=0; i<64;i++) { printf("%d", gi[i]); }
+  printf("-\n");
 }
 
 
@@ -300,7 +321,10 @@ void step2() {
   //ggj = (int *) malloc( (bits) * sizeof(int));
   //gpj = (int *) malloc( (bits) * sizeof(int));
 
-  int tempPropagates[bits] = {0};
+  int tempPropagates[block_size] = {0};
+  int tempGG;
+  int tempGP;
+
   int x;
   int j;
   int i = 0;
@@ -318,13 +342,13 @@ void step2() {
     gpj[j] = pi[i+7] || pi[i+6] || pi[i+5] || pi[i+4] || pi[i+3] || pi[i+2] || pi[i+1] || pi[i]; */
 
     tempGG = 0;
-    tempPropagates[bits-1] = 1 //Default to true in order to ignore in ands
+    tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempGP = pi[i];
-    for(x = bits-2; x > 0; x = x - 1) { //Iterate through the block backwards
+    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
       tempPropagates[x] = tempPropagates[x+1] && pi[i+x];
     }
 
-    for(x = 0; x < bits; x++) {
+    for(x = 0; x < block_size; x++) {
       tempGG = tempGG || (tempPropagates[x] && gi[i+x]);
       tempGP = tempGP || pi[i+x];
     }
@@ -333,16 +357,15 @@ void step2() {
     gpj[j] = tempGP;
 
     //Iterate/manage i as well. i represents the base index of this block
-    i = i + bits;
-
-    //if(i > bits) { printf("WARNING: In step2, i surpassed bits! It is now: %d.\n", i); }
+    i = i + block_size;
+    if(i > bits) { printf("WARNING: In step2, i surpassed bits! It is now: %d.\n", i); }
   }
 
-  /*
-  for(j=0;j<ngroups;j++) { printf("%d", gpj[j]); }
-  printf("-\nP:");
+  
+  for(j=0;j<64/*ngroups*/;j++) { printf("%d", gpj[j]); }
+  printf("-Step2\n"); /*
   for(i=3576;i<3592;i++) { printf("%d", pi[i]); }
-  printf("\n"); */
+  printf("\n");*/
 }
 
 //Calculate sg_k and sp_k for all 64 sections k using ggj and gpj (larger subsections)
@@ -351,9 +374,11 @@ void step3() {
   //sgk = (int *) malloc( (bits) * sizeof(int));
   //spk = (int *) malloc( (bits) * sizeof(int));
 
-  int tempPropagates[bits] = {0};
-  int x;
+  int tempPropagates[block_size] = {0};
+  int tempSG;
+  int tempSP;
 
+  int x;
   int k;
   int j = 0;
 
@@ -385,36 +410,43 @@ void step3() {
     if(j >= ngroups) { printf("WARNING: In step3, j surpassed ngroups! It is now: %d.\n", j); } */
 
     tempSG = 0;
-    tempPropagates[bits-1] = 1 //Default to true in order to ignore in ands
+    tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempSP = gpj[j];
-    for(x = bits-2; x > 0; x = x - 1) { //Iterate through the block backwards
+    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
       tempPropagates[x] = tempPropagates[x+1] && gpj[j+x];
     }
 
     //TODO save array of propagate sets, and in?
-    for(x = 0; x < bits; x++) {
+    for(x = 0; x < block_size; x++) {
       //Temps represent the sum of all earlier values
       tempSG = tempSG || (tempPropagates[x] && ggj[j+x]);
       tempSP = tempSP || gpj[j+x];
     }
 
-    sgk[j] = tempSG;
-    spk[j] = tempSP;
+    sgk[k] = tempSG;
+    spk[k] = tempSP;
 
     //Iterate/manage j as well.
-    j = j + bits;
+    j = j + block_size;
+    if(j > ngroups) { printf("WARNING: In step2, j surpassed ngroups! It is now: %d.\n", j); }
 
   }
 
-  /*
+  
   printf("step3:");
-  for(k=0;k<nsections;k++) { printf("%d", spk[k]); }
-  printf("\n"); */
+  for(k=0;k<nsections;k++) { printf("%d", sgk[k]); }
+  printf("\n"); 
 }
 
 
 //Calculat ss_gl and sp_l for all 8 super sections l using sg_k and sp_k
 void step4() {
+
+  int tempPropagates[block_size] = {0};
+  int tempSSG;
+  int tempSSP;
+  int x;
+
   int l;
   int k = 0;
 
@@ -445,32 +477,32 @@ void step4() {
     */
 
     tempSSG = 0;
-    tempPropagates[bits-1] = 1 //Default to true in order to ignore in ands
+    tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempSSP = spk[k];
-    for(x = bits-2; x > 0; x = x - 1) { //Iterate through the block backwards
+    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
       tempPropagates[x] = tempPropagates[x+1] && spk[k+x];
     }
 
     //TODO save array of propagate sets, and in?
-    for(x = 0; x < bits; x++) {
+    for(x = 0; x < block_size; x++) {
       //Temps represent the sum of all earlier values
       tempSSG = tempSSG || (tempPropagates[x] && sgk[k+x]);
       tempSSP = tempSSP || spk[k+x];
     }
 
-    ssgl[j] = tempSSG;
-    sspl[j] = tempSSP;
+    ssgl[l] = tempSSG;
+    sspl[l] = tempSSP;
 
     //Iterate/manage k as well.
-    k = k + bits;
-
+    k = k + block_size;
+    if(k > nsections) { printf("WARNING: In step4, k surpassed nsections! It is now: %d.\n", k); }
   }
 
-  /*  
+  
   printf("step4:");
-  for(l=0;l<nsupersections;l++) { printf("%d", sspl[l]); }
+  for(l=0;l<nsupersections;l++) { printf("%d", ssgl[l]); }
   printf("\n");
-  */
+  
 
 }
 
@@ -481,7 +513,6 @@ void step5() {
 
   //ssc_-1 = 0
   sscl[0] = ssgl[0] || (sspl[0] && 0);
-  //printf("-----ssgl:%d\n", ssgl[0]);
 
   //And now, doing the other 7 super sections.
   /*sscl[1] = ssgl[1] || (sspl[1] &&
@@ -524,8 +555,11 @@ void step5() {
   for(l=1; l < nsupersections; l++) {
 
     sscl[l] = ssgl[l] || (sspl[l] && sscl[l-1]);
-//    printf("step5: %d->%d; %d, %d\n", l, sscl[l], ssgl[l], sspl[l]);
+    //printf("step5: %d->%d; %d, %d\n", l, sscl[l], ssgl[l], sspl[l]);
   }
+
+  for(l=0; l<nsupersections; l++) { printf("%d", ssgl[l]);}
+  printf("-Step 5\n");
 }
 
 
@@ -535,12 +569,12 @@ void step6() {
   int k;
   int x;
 
-  for(k=0; k < nsections; k = k + bits) {
+  for(k=0; k < nsections; k = k + block_size) {
     
-    //if(k < 30) {printf("step6: %d %d, %d\n", k, sscl[k/bits], k/bits); }
+    //if(k < 30) {printf("step6: %d %d, %d\n", k, sscl[k/block_size], k/block_size); }
 
-    sck[k] = sgk[k] || (spk[k] && sscl[k/bits]);
-    for(x=1; x<bits;x++){  //Each group
+    sck[k] = sgk[k] || (spk[k] && sscl[k/block_size]);
+    for(x=1; x<block_size;x++){  //Each group
       sck[k+x] = sgk[k+x] || (spk[k+x] && sck[k+x-1]);
     }
 
@@ -587,12 +621,12 @@ void step7() {
   int j;
   int x;
 
-  for(j=0; j < ngroups; j = j + bits) {
+  for(j=0; j < ngroups; j = j + block_size) {
     
 //    if(j > 430 && j < 460) {printf("step7:_%d %d, %d, %d.\n", j, ggj[j], gpj[j], sck[j/8]); }
 
-    gcj[j] = ggj[j] || (gpj[j] && sck[j/bits]);
-    for(x=1; x<bits;x++){  //Each group
+    gcj[j] = ggj[j] || (gpj[j] && sck[j/block_size]);
+    for(x=1; x<block_size;x++){  //Each group
       gcj[j+x] = ggj[j+x] || (gpj[j+x] && gcj[j+x-1]);
 
 
@@ -643,15 +677,15 @@ void step8() {
   int i;
   int x;
 
-  for(i=0; i < bits; i = i + bits) {
+  for(i=0; i < bits; i = i + block_size) {
 
-//    if(i < 3550 && i > 3560) {printf("stepbits:_%d %d, %d\n", i, gcj[i/bits], i+x); }
+//    if(i < 3550 && i > 3560) {printf("stepblock_size:_%d %d, %d\n", i, gcj[i/block_size], i+x); }
 
-    ci[i] = gi[i] || (pi[i] && gcj[i/bits]);
-    for(x=1; x<bits;x++){  //Each group
+    ci[i] = gi[i] || (pi[i] && gcj[i/block_size]);
+    for(x=1; x<block_size;x++){  //Each group
       ci[i+x] = gi[i+x] || (pi[i+x] && ci[i+x-1]);
 
-//      if(i < 35bits8 && i > 3560) {printf("step8: %d %d, %d\n", i+x, ci[i+x], i+x); }
+      //if(i < 80 && i > 32) {printf("step8: %d %d, %d\n", i+x, pi[i+x], ci[i+x]); }
     }
     
     
@@ -711,7 +745,7 @@ void step9() {
     sumi[i] = bin1[i] ^ bin2[i] ^ ci[i-1];
     //sumi[i] = gi[i] ^ pi[i] ^ ci[i-1];
 
-//    if(i < 3588 && i > 3580) {
+    if(i < 80) { printf("%d", ci[i]); }
 //      printf("%d: %d %d %d, i=%d\n", sumi[i], bin1[i], bin2[i], ci[i-1], i); }
       //ci[3584] is failiing?
   }
@@ -735,22 +769,37 @@ void step9() {
 void cla() {
 
   step1();
-
+  //MPI_Barrier(MPI_COMM_WORLD);
+  printf("STEP1.\n");
   step2();
-
+  //MPI_Barrier(MPI_COMM_WORLD);
+  printf("STEP2.\n");
   step3();
-
+  //MPI_Barrier(MPI_COMM_WORLD);
+  printf("STEP3.\n");
   step4();
+  //MPI_Barrier(MPI_COMM_WORLD);
+  printf("STEP4.\n");
 
   step5();
+  //MPI_Barrier(MPI_COMM_WORLD);
+  printf("STEP5.\n");
 
   step6();
+  //MPI_Barrier(MPI_COMM_WORLD);
+  printf("STEP6.\n");
   
   step7();
+  //MPI_Barrier(MPI_COMM_WORLD);
+  printf("STEP7.\n");
   
   step8();
+  //MPI_Barrier(MPI_COMM_WORLD);
+  printf("STEP8.\n");
   
   step9();
+  //MPI_Barrier(MPI_COMM_WORLD);
+  printf("STEP9.\n");
 
   //Sum has now been set! It is a binary array, with most significant bit being at sumi[4095]
 
@@ -769,7 +818,7 @@ void simpleRippleCarryTest(){
   for(i=0; i<bits+1;i++){
 
     if(i < 24 && false){  //Testing
-      printf("Ripple: oldC=%d, gi=%d, pi=%d:b1=%d or b2=%d; result=%d\n", 
+      printf("Ripple: oldC=%d, gi=%d, pi=%d:b1=%d or b2=%d; result=%d.\n", 
         oldC, gi[i], pi[i], bin1[i], bin2[i], gi[i] || (pi[i] && oldC));
     }
 
@@ -799,11 +848,91 @@ void relationsTests(){
 
 
 //Begin program run here
-//Example Line: ./leeh17_hw1.c assignment1-testcase.txt
-//Creates output file leeh17_hw1_output.txt
+// Compile Code: mpicc -g -Wall mpi-cla-io.c -o mpi-cla-io
+// Example Run Code: mpirun -np 4 ./mpi-cla-io test_input_1.txt test_output_1.txt
+//Creates output file according to argv[2]
 int main(int argc, char *argv[]){
+/*
+  int my_mpi_size = -1;
+  int my_mpi_rank = -1;
+  
+  int inputBin1[bits];
+  int inputBin2[bits];
+
+  int rankSize = digits/my_mpi_size;  //Collect before scatter, when it is changed.
+
+  MPI_Init( &argc, &argv);
+  MPI_Comm_size(MPI_COMM_WORLD, &my_mpi_size);
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_mpi_rank);
+
+  if( argc != 3 )
+    {
+      printf("Not sufficient arguments, only %d found \n", argc);
+      exit(-1);
+    }
+
+  if( 0 == my_mpi_rank ) // compare 0 first ensures == operator must be used and not just =
+    {
+      printf("MPI Rank %d: Attempt to Read File Data \n", my_mpi_rank );
+
+      if( (my_input_file = fopen( argv[1], "r")) == NULL )
+  {
+    printf("Failed to open input data file: %s \n", argv[1]);
+  }
+      if( (my_output_file = fopen( argv[2], "w")) == NULL )
+  {
+    printf("Failed to open input data file: %s \n", argv[2]);
+  }
+      //Read in our two input hex strings
+      fscanf( my_input_file, "%s %s", hex_input_a, hex_input_b);
+      //fprintf( my_output_file, "%s\n%s\n", hex_input_a, hex_input_b );
+
+      //Allocate and fill our two binary arrays
+      bin1 = (int *) malloc( (rankSize) * sizeof(int));
+      bin2 = (int *) malloc( (rankSize) * sizeof(int));
+
+      //inputBin1 = int[bits];
+      //inputBin2 = int[bits];
+
+      //Convert the two hexadecimal strings into usable numbers, saving to globals bin1/2
+      convertToNumber(hex1, inputBin1);
+      convertToNumber(hex2, inputBin2);
+      //Makes old function readInput obsolete. TODO delete
+
+      printf("MPI Rank %d: Finished Reading and Write File Data \n", my_mpi_rank );
+
+      fclose( my_input_file );
+      fclose( my_output_file );
+    }
+
+  //Split bin1 and bin2 up for the X ranks
+  MPI_Scatter( //Distribute both bin1 and bin2
+    inputBin1, rankSize, MPI_INT,
+    &bin1, rankSize, MPI_INT,
+    0, MPI_COMM_WORLD);
+  MPI_Scatter(
+    inputBin2, rankSize, MPI_INT,
+    &bin2, rankSize, MPI_INT,
+    0, MPI_COMM_WORLD);
+
+  //startIndex =  my_mpi_rank      * rankSize;
+  //endIndex   = (my_mpi_rank + 1) * rankSize;
+
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  printf("Rank %d/%d: Hello World \n", my_mpi_rank, my_mpi_size);
+
+  //cla()
+
+  //printOutput();
+
+  MPI_Finalize();
+  printf("\nFinal return redundant? No, if this runs. Rank_%d\n", my_mpi_rank);
+  return 0; //Likely redundant
+  //------mpi_cla_io code ^
+*/
   //int i;
-  //printf("TESTING: Initial Program Open\n");
+  printf("TESTING: Initial Program Open\n");
 
   readInput(argv[1]);
 
@@ -811,7 +940,7 @@ int main(int argc, char *argv[]){
   //printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
 
   //printf("Test convert to hex:\n%s\n%s\n", convertToHexString(bin1), convertToHexString(bin2));
-
+  printf("CLA\n");
   cla();
   //printf("TESTING bin values: %d, %d\n", bin1[0], bin2[0]);
 
