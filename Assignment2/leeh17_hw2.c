@@ -273,13 +273,15 @@ void printOutput() {
   //Convert number to usable/printable string
   hexString = convertToHexString(sumi);
 
+  /*
   //printf("Sum:\n");
   //for(i=0;i<bits;i++){  printf("%d", sumi[i]);}
-  //printf("\n");
+  //printf("\n"); */
 
   //Print
 
-  printf("%s-Last 40 bits\n", hexString + input_size-40);
+  //hexString[80] = '\0';
+  printf("Result: %s\n", hexString);
 
   free(hexString);
 }
@@ -344,8 +346,9 @@ void step2() {
     tempGG = 0;
     tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempGP = pi[i];
-    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
+    for(x = block_size-2; x >= 0; x = x - 1) { //Iterate through the block backwards
       tempPropagates[x] = tempPropagates[x+1] && pi[i+x];
+      if(j < 2) {printf("%d: %d\n", x, tempPropagates[x]);}
     }
 
     for(x = 0; x < block_size; x++) {
@@ -362,7 +365,7 @@ void step2() {
   }
 
   
-  for(j=0;j<64/*ngroups*/;j++) { printf("%d", gpj[j]); }
+  for(j=0;j<64/*ngroups*/;j++) { printf("%d", ggj[j]); }
   printf("-Step2\n"); /*
   for(i=3576;i<3592;i++) { printf("%d", pi[i]); }
   printf("\n");*/
@@ -412,7 +415,7 @@ void step3() {
     tempSG = 0;
     tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempSP = gpj[j];
-    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
+    for(x = block_size-2; x >= 0; x = x - 1) { //Iterate through the block backwards
       tempPropagates[x] = tempPropagates[x+1] && gpj[j+x];
     }
 
@@ -479,7 +482,7 @@ void step4() {
     tempSSG = 0;
     tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempSSP = spk[k];
-    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
+    for(x = block_size-2; x >= 0; x = x - 1) { //Iterate through the block backwards
       tempPropagates[x] = tempPropagates[x+1] && spk[k+x];
     }
 
