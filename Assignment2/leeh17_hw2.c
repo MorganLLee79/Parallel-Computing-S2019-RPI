@@ -7,15 +7,15 @@
 /***** Data Structures (Provided) *********/
 
 //----From mpi_cla_io
-// Compile Code: mpicc -g -Wall mpi-cla-io.c -o mpi-cla-io
-// Example Run Code: mpirun -np 4 ./mpi-cla-io test_input_1.txt test_output_1.txt
+// Compile Code: mpicc -g -Wall leeh17_hw2.c -o leeh17_hw2.out
+// Example Run Code: mpirun -np 32 ./leeh17_hw2.out test_input_1.txt test_output_1.txt
 // Both input and output files will 524490 bytes in size. The two additional
 //    characters are due to a newline characters between each input and at the
 //    end of the file.
 
 
-#define testing_RunTime 1
-#define testing_Barriers 1
+#define testing_RunTime 0
+#define testing_Barriers 0
 
 #define HEX_INPUT_SIZE 262144
 
@@ -28,7 +28,7 @@ FILE *my_output_file=NULL;
 #define block_size 32         //New block size, 32 bit blocks and 32 MPI ranks
 
 //Do not touch these defines
-#define digits (input_size+1)                 //   262,145
+#define digits 262144                 //   262,145
 #define bits digits * 4                       //i, 1,048,580
 #define ngroups bits/block_size               //j, 32,768 +1?
 #define nsections ngroups/block_size          //k, 1024
@@ -162,6 +162,8 @@ void convertToNumber(char *inputString, int* result) {
 //Input:  The file path
 void readInput(char *inputFilePath) {
 
+  printf("READINPUT RAN");
+
   //bin1 = (int *) malloc( (bits) * sizeof(int));
   //bin2 = (int *) malloc( (bits) * sizeof(int));
 
@@ -169,11 +171,11 @@ void readInput(char *inputFilePath) {
   hex2 = (char *) malloc( (digits+1) * sizeof(char));
 
   //Read from file into hex1 and hex2
-  scanf("%s %s", hex1 + sizeof(char), hex2 + sizeof(char));
-  hex1[0] = '0';        //Add leading 0
+  scanf("%s %s", hex1, hex2);
+  //hex1[0] = '0';        //Add leading 0
   hex1[digits] = '\0';  //Add null terminator
 
-  hex2[0] = '0';
+  //hex2[0] = '0';
   hex2[digits] = '\0';
 
   //printf("TEST: %ld\n%s\n", strlen(hex2), hex2);
@@ -533,10 +535,12 @@ void step6() {
     //if(k < 30) {printf("step6: %d %d, %d\n", k, sscl[k/block_size], k/block_size); }
 
     sck[k] = sgk[k] || (spk[k] && sscl[my_mpi_rank/*k/block_size*/]);
+
     for(x=1; x<block_size;x++){  //Each group
       sck[k+x] = sgk[k+x] || (spk[k+x] && sck[k+x-1]);
     }
   }
+  //sck[0] = 0;
 
   //printf("step6:_sck[56]:%d %d, %d, %d.\n", sck[56], sgk[56], spk[56], sscl[7]);
 }
@@ -546,20 +550,23 @@ void step7() {
   int j;
   int x;
 
+  
   for(j=0; j < ngroups/my_mpi_size; j = j + block_size) {
-    
 //    if(j > 430 && j < 460) {printf("step7:_%d %d, %d, %d.\n", j, ggj[j], gpj[j], sck[j/8]); }
 
+    
     gcj[j] = ggj[j] || (gpj[j] && sck[j/block_size]);
+
     for(x=1; x<block_size;x++){  //Each group
       gcj[j+x] = ggj[j+x] || (gpj[j+x] && gcj[j+x-1]);
+    }
 
 
 //      if(j > 430 && j < 460) {printf("step7: %d %d, %d, %d.\n", 
 //         j+x, ggj[j+x], gpj[j+x], gcj[j+x-1]); }
-    }
 
   }
+  //gcj[0] = 0;
 
 
   //printf("Step 7: sck:%d, %d\n", sck[0], j);
@@ -573,13 +580,24 @@ void step8() {
   for(i=0; i < bits/my_mpi_size; i = i + block_size) {
 
 //    if(i < 3550 && i > 3560) {printf("stepblock_size:_%d %d, %d\n", i, gcj[i/block_size], i+x); }
-
+    
     ci[i] = gi[i] || (pi[i] && gcj[i/block_size]);
+
     for(x=1; x<block_size;x++){  //Each group
       ci[i+x] = gi[i+x] || (pi[i+x] && ci[i+x-1]);
 
-      //if(i < 80 && i > 32) {printf("step8: %d %d, %d\n", i+x, pi[i+x], ci[i+x]); }
+      //if(i < 20 && my_mpi_rank == 0) {printf("step8: %d %d, %d\n", i+x, pi[i+x], ci[i+x]); }
     }
+  }
+  //ci[0] = 0;
+
+  if(my_mpi_rank == 0) {
+    printf("-");
+    for(i=0;i<79;i++){
+      printf("%d", ci[i]);
+    }
+    printf("Step8\nc[0] = %d, g=%d, p=%d, gcj=%d\n", ci[0], gi[0], pi[0], gcj[0]);
+    printf("Why is ci off by one???\n");
   }
 
   //printf("Step 8: c=%d g=%d p=%d c-1=%d; %d\n", ci[1], gi[0], pi[0], gcj[0], i);
@@ -598,13 +616,15 @@ void step9() {
 
   //sumi[i] = gi[i] ^ pi[i] ^ 0; //0 represents nothing being carried in, since first index
   sumi[i] = bin1[i] ^ bin2[i] ^ 0;
+  //if(i < 80 && my_mpi_rank == 0) { printf("-"); }
 
   //This would actually be a parallel.
   for(i = 1; i < bits/my_mpi_size; i++) {
     sumi[i] = bin1[i] ^ bin2[i] ^ ci[i-1];
     //sumi[i] = gi[i] ^ pi[i] ^ ci[i-1];
 
-    //if(i < 80) { printf("%d", ci[i]); }
+    //if(i < 80 && my_mpi_rank == 0) { printf("%d", ci[i]); }
+
     //  printf("%d: %d %d %d, i=%d\n", sumi[i], bin1[i], bin2[i], ci[i-1], i); }
       //ci[3584] is failiing?
   }
@@ -632,36 +652,36 @@ void cla(int runBarriers) {
 
   step1();  //Initial gi and pi generation
   if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
-  //printf("STEP1.\n");
+  //if(my_mpi_rank == 0) { printf("STEP1.\n"); }
   step2();
   if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
-  //printf("STEP2.\n");
+  //if(my_mpi_rank == 0) { printf("STEP2.\n"); }
   step3();
   if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
-  //printf("STEP3.\n");
+  //if(my_mpi_rank == 0) { printf("STEP3.\n"); }
   step4();
   if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
-  //printf("STEP4.\n");
+  //if(my_mpi_rank == 0) { printf("STEP4.\n"); }
 
   step5();  //Merging carry values
   if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
-  //printf("STEP5.\n");
+  //if(my_mpi_rank == 0) { printf("STEP5.\n"); }
 
   step6();
   if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
-  //printf("STEP6.\n");
+  //if(my_mpi_rank == 0) { printf("STEP6.\n"); }
   
   step7();
   if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
-  //printf("STEP7.\n");
+  //if(my_mpi_rank == 0) { printf("STEP7.\n"); }
   
   step8();
   if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
-  //printf("STEP8.\n");
+  //if(my_mpi_rank == 0) { printf("STEP8.\n"); }
   
   step9();  //Final summing
   if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
-  //printf("STEP9.\n");
+  if(my_mpi_rank == 0) { printf("STEP9.\n"); }
 
   //Sum has now been set! It is a binary array, with most significant bit being at sumi[4095]
 
@@ -676,17 +696,26 @@ void simpleRippleCarryTest(){
 
   int rippleSum[bits] = {0};
   int oldC = 0;
+  int g=0;
+  int p=0;
 
-  for(i=0; i<bits+1;i++){
+  printf("HERE\n");
 
-    if(i < 24 && 0){  //Testing
+  printf("--%d--", inputBin2[0]);
+
+
+  for(i=0; i<24;i++){
+
+    g = bin1[i] && bin2[i];
+    p = bin1[i] || bin2[i];
+
+    if(i < 24 && 1){  //Testing
       printf("Ripple: oldC=%d, gi=%d, pi=%d:b1=%d or b2=%d; result=%d.\n", 
-        oldC, gi[i], pi[i], bin1[i], bin2[i], gi[i] || (pi[i] && oldC));
+        oldC, g, p, bin1[i], bin2[i], g || (p && oldC));
     }
 
     rippleSum[i] = bin1[i] ^ bin2[i] ^ oldC;
-    //rippleSum[i] = gi[i] ^ pi[i] ^ oldC;
-    oldC = gi[i] || (pi[i] && oldC);
+    oldC = g || (p && oldC);
 
   }
 
@@ -694,9 +723,9 @@ void simpleRippleCarryTest(){
 
   if(0) {
     printf("\nRIPPLE\n");
-    for(i=0;i<bits;i++){  printf("%d", bin1[i]);}
+    for(i=0;i<bits;i++){  printf("%d", g);}
     printf("\n");
-    for(i=0;i<bits;i++){  printf("%d", bin2[i]);}
+    for(i=0;i<bits;i++){  printf("%d", p);}
     printf("\nRIPPLE\n");
   }
 }
@@ -747,17 +776,11 @@ int main(int argc, char** argv){
     hex2 = (char *) malloc( (digits+1) * sizeof(char));
 
     //Read in our two input hex strings
-    fscanf( my_input_file, "%s %s", hex1 + sizeof(char), hex2 + sizeof(char));
+    fscanf( my_input_file, "%s %s", hex1, hex2);
     //fprintf( my_output_file, "%s\n%s\n", hex_input_a, hex_input_b );
 
-    hex1[0] = '0';        //Add leading 0
     hex1[digits] = '\0';  //Add null terminator
-
-    hex2[0] = '0';
     hex2[digits] = '\0';
-
-    //inputBin1 = int[bits];
-    //inputBin2 = int[bits];
 
     //Convert the two hexadecimal strings into usable numbers, saving to globals bin1/2
     convertToNumber(hex1, inputBin1);
@@ -769,7 +792,37 @@ int main(int argc, char** argv){
 
     fclose( my_input_file );
     //fclose( my_output_file );
+
+int rippleSum[bits] = {0};
+int oldC = 0;
+int g=0;
+int p=0;
+int i=0;
+
+
+for(i=0; i<bits;i++){
+
+  g = inputBin1[i] && inputBin2[i];
+  p = inputBin1[i] || inputBin2[i];
+
+  if(i < 80){  //Testing
+    //printf("Ripple: oldC=%d, gi=%d, pi=%d:b1=%d or b2=%d; result=%d.\n", 
+    //  oldC, g, p, inputBin1[i], inputBin2[i], g || (p && oldC));
+    printf("%d", oldC);
   }
+
+  rippleSum[i] = inputBin1[i] ^ inputBin2[i] ^ oldC;
+  oldC = g || (p && oldC);
+
+}
+printf("\n");
+char* temp = convertToHexString(rippleSum);
+//temp[80] = '\0';
+printf("Ripple Carry Test Results:\n%s\n\n", temp+digits-50);
+
+
+  }
+
 
   //printf("Rank %d: Reached point before scatter\n", my_mpi_rank);
   MPI_Barrier(MPI_COMM_WORLD);
@@ -786,7 +839,10 @@ int main(int argc, char** argv){
     &bin2, rankSize, MPI_INT,
     0, MPI_COMM_WORLD);
 
-  //Done with inputBins, can free; NVM I moved to end, use in rank 0 for final bit
+  //Done with inputBins, can free
+  free(inputBin1);
+  free(inputBin2);
+
 
   //printf("Rank %d: Finished scattering data.\n", my_mpi_rank);
 
@@ -804,10 +860,10 @@ int main(int argc, char** argv){
 
   //printf("Rank %d/%d: Hello World. RankSize=%d.\n", my_mpi_rank, my_mpi_size, rankSize);
 
-  //And the timer
+  MPI_Barrier(MPI_COMM_WORLD);
+  //End the timer
   finish_time = MPI_Wtime();
 
-  MPI_Barrier(MPI_COMM_WORLD);
 
   //Collect the sums
   int finalSum[bits] = {0}; //Final collecting array
@@ -855,8 +911,8 @@ int main(int argc, char** argv){
   //free(bin2);
   free(hex1);
   free(hex2);
-  free(inputBin1);
-  free(inputBin2);
+  //free(inputBin1);
+  //free(inputBin2);
 
   return 0;
 }
