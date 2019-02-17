@@ -92,6 +92,9 @@ int main(int argc, char** argv) {
 
   	//printf("Rank %d/%d: Receive test: %d\n", my_mpi_rank, my_mpi_size, testRecv);
 
+  	receiver[0] = 10;
+  	receiver[1] = 30;
+
   	MPI_Wait(&request1, &testStatus);
   } else if(my_mpi_rank == 0) {
   	testSend = 5;

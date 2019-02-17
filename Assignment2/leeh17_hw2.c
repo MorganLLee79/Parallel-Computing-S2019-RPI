@@ -15,7 +15,7 @@
 
 
 #define testing_RunTime 0
-#define testing_Barriers 0
+#define testing_Barriers 1
 
 #define HEX_INPUT_SIZE 262144
 
@@ -363,11 +363,12 @@ void step2() {
     if(i > bits/my_mpi_size) { printf("WARNING: In step2, i surpassed bits! It is now: %d.\n", i); }
   }
 
-  /*
-  for(j=0;j<ngroups;j++) { printf("%d", ggj[j]); }
-  printf("-Step2\n"); 
-  for(i=3576;i<3592;i++) { printf("%d", pi[i]); }
-  printf("\n");*/
+  /*if(my_mpi_rank == 1) {
+    for(j=0;j<20 && j<ngroups;j++) { printf("%d", ggj[j]); }
+    printf("-step2 g\n"); 
+    for(j=0;j<20 && j<ngroups;j++) { printf("%d", gpj[j]); }
+    printf("-step2 p\n");
+  }*/
 }
 
 //Calculate sg_k and sp_k for all 64 sections k using ggj and gpj (larger subsections)
@@ -411,10 +412,12 @@ void step3() {
 
   }
 
-  /*
-  printf("step3:");
-  for(k=0;k<nsections;k++) { printf("%d", sgk[k]); }
-  printf("\n"); */
+  /*if(my_mpi_rank == 1) {
+    for(j=0;j<20 && j<nsections;j++) { printf("%d", sgk[j]); }
+    printf("-step3 g\n"); 
+    for(j=0;j<20 && j<nsections;j++) { printf("%d", spk[j]); }
+    printf("-step3 p\n");
+  }*/
 }
 
 
@@ -450,17 +453,19 @@ void step4() {
 
     //Iterate/manage k as well.
     k = k + block_size;
+
     if(k > nsections/my_mpi_size) {
       printf("WARNING: In step4, k surpassed nsections! It is now: %d.\n", k);
     }
   }
 
-  /*
-  printf("step4:");
-  for(l=0;l<nsupersections;l++) { printf("%d", ssgl[l]); }
-  printf("\n");
-  */
-
+/*
+  if(my_mpi_rank == 1) {
+    for(k=0;k<20 && k<nsupersections;k++) { printf("%d", ssgl[k]); }
+    printf("-step4 g\n"); 
+    for(k=0;k<20 && k<nsupersections;k++) { printf("%d", sspl[k]); }
+    printf("-step4 p\n");
+  } */
 }
 
 
@@ -472,7 +477,9 @@ void step5() {
   MPI_Request recvRequest, sendRequest; //Send request will be unused
   MPI_Status mpiStatus;
 
-  int received = -1; //The previous sscl
+  int received, i;
+
+  received = -1; //The previous sscl. -1 as placeholder
 
   //rank 0 doesn't receive anything
   if(my_mpi_rank != 0) {
@@ -486,23 +493,37 @@ void step5() {
 
     //sscl[0] = ssgl[0] || (sspl[0] && 0);
     received = 0;
+    
+    //int i;
+    //for(i=0;i<my_mpi_size;i++) { printf("-%d%d", ssgl[i], sspl[i]); }
   }
 
   if(received != 0 && received != 1) {
     printf("ERROR: Rank %d: Non-valid sscl \'%d\' received in step5.\n", my_mpi_rank, received);
   }
 
-  //Calculate sscl
-  sscl[my_mpi_rank] = ssgl[0] || (sspl[0] && received);
+  //Calculate all sscl[]s
+  sscl[0] = ssgl[0] || (sspl[0] && received);
+  printf("Rank%d: Set %d as sscl. g=%d || (p=%d && sscl=%d)\n", my_mpi_rank,
+    sscl[0], ssgl[0], sspl[0], received);
+
+  for(i=1; i<nsupersections/my_mpi_size;i++) {
+    sscl[i] = ssgl[i] || (sspl[i] && sscl[i-1]);
+
+    printf("Rank%d: Set %d as sscl. g=%d || (p=%d && sscl=%d); i=%d\n", my_mpi_rank,
+      sscl[i], ssgl[i], sspl[i], sscl[i-1], i);
+  }
+  
   //printf("Rank %d: Step5, checking indices. c=%d, g=%d, p=%d, last sscl=%d.\n", my_mpi_rank,
   //  sscl[my_mpi_rank], ssgl[0], sspl[0], received);
 
   //rank 31 doesn't send anything
   if(my_mpi_rank != my_mpi_size-1) {
-    //Send this sscl
-
-    MPI_Isend(&sscl[my_mpi_rank], 1, MPI_INT, my_mpi_rank+1, 0, MPI_COMM_WORLD, &sendRequest);
+    //Send this latest sscl
+    MPI_Isend(&sscl[i-1], 1, MPI_INT, my_mpi_rank+1, 0, MPI_COMM_WORLD, &sendRequest);
     //MPI_Isend(&sspl[my_mpi_rank], 1, MPI_INT, my_mpi_rank+1, 1, MPI_COMM_WORLD, &req_p_send);
+
+    printf("Rank%d: Sent %d as sscl to rank %d.\n", my_mpi_rank, sscl[my_mpi_rank+i-1], my_mpi_rank+1);
   }
 
 
@@ -534,7 +555,9 @@ void step6() {
     
     //if(k < 30) {printf("step6: %d %d, %d\n", k, sscl[k/block_size], k/block_size); }
 
-    sck[k] = sgk[k] || (spk[k] && sscl[my_mpi_rank/*k/block_size*/]);
+    //printf("r%d: sscl=%d, at index %d\n", my_mpi_rank, sscl[k/block_size], k/block_size);
+    
+    sck[k] = sgk[k] || (spk[k] && sscl[k/block_size]);
 
     for(x=0; x<block_size;x++){  //Each group
       sck[k+x] = sgk[k+x] || (spk[k+x] && sck[k+x-1]);
@@ -620,17 +643,25 @@ void step9() {
   }
 
   //Now gather the parts from each rank
-
-  if(my_mpi_rank == 0) {
+  if(my_mpi_rank == 1) {
     //printf("-");
-    for(i=16370;i<16450;i++) { //bits/my_mpi_size;i+=1024){
+    for(i=0;i<5;i++) { //bits/my_mpi_size;i+=1024){
       //printf(",%d%d", ci[i-1], ci[i]);
-      printf("%d", ci[i]);
+      printf("sum=%d, c=%d, g=%d, p=%d, b1=%d, b2=%d\n",
+        sumi[i], ci[i], gi[i], pi[i], bin1[i], bin2[i]);
     }
-    printf("Step8\nc[0] = %d, g=%d, p=%d, gcj=%d\n", ci[0], gi[0], pi[0], gcj[0]);
+    //printf("Step8\nc[0] = %d, g=%d, p=%d, gcj=%d\n", ci[0], gi[0], pi[0], gcj[0]);
+    printf("What is at 16384?\n");
+  } else if(my_mpi_rank == 0) {
+    //Print last 5 bits
+    for(i=bits/my_mpi_size-5;i<bits/my_mpi_size;i++) { //bits/my_mpi_size;i+=1024){
+      //printf(",%d%d", ci[i-1], ci[i]);
+      printf("rank 0: sum=%d, c=%d, g=%d, p=%d, b1=%d, b2=%d\n",
+        sumi[i], ci[i], gi[i], pi[i], bin1[i], bin2[i]);
+    }
+    //printf("Step8\nc[0] = %d, g=%d, p=%d, gcj=%d\n", ci[0], gi[0], pi[0], gcj[0]);
     printf("What is at 16384?\n");
   }
-
 
   /*
   i = 48;
@@ -681,7 +712,7 @@ void cla(int runBarriers) {
   
   step9();  //Final summing
   if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
-  if(my_mpi_rank == 0) { printf("STEP9.\n"); }
+  //if(my_mpi_rank == 0) { printf("STEP9.\n"); }
 
   //Sum has now been set! It is a binary array, with most significant bit being at sumi[4095]
 
@@ -804,16 +835,17 @@ for(i=0; i<bits;i++){
   g = inputBin1[i] && inputBin2[i];
   p = inputBin1[i] || inputBin2[i];
 
-  if(i>=16370 && i<16450){//i % 1024 == 0 && i/1024 < 80){  //Testing
-    //printf("Ripple: oldC=%d, gi=%d, pi=%d:b1=%d or b2=%d; result=%d.\n", 
-    //  oldC, g, p, inputBin1[i], inputBin2[i], g || (p && oldC));
-    //printf(",%d%d", oldC, g||(p&&oldC));
-    printf("%d", oldC);
-  }
 
   rippleSum[i] = inputBin1[i] ^ inputBin2[i] ^ oldC;
   oldC = g || (p && oldC);
 
+  if(i>524190 && i<524196+8){//i % 1024 == 0 && i/1024 < 80){  //Testing
+    printf("Ripple: sum=%d, oldC=%d, gi=%d, pi=%d:b1=%d or b2=%d.\n", 
+      rippleSum[i], oldC, g, p, inputBin1[i], inputBin2[i]);
+    //printf(",%d%d", oldC, g||(p&&oldC));
+    //printf("%d", rippleSum[i]);//oldC);
+
+  }
 }
 printf("\n\n");
 //char* temp = convertToHexString(rippleSum);
@@ -875,6 +907,11 @@ printf("\n\n");
   int tempSender = -1;
   int finalCarry = -1;*/
   if(my_mpi_rank == 0) {
+    /*int j;
+    printf("Final sum:");
+    for(j=65524; j<65536+8;j++) {printf("%d", finalSum[j]);}
+    printf("\n"); */
+
     //Get the final bit, may have been missed due to rounding?
 /*    if(bits % my_mpi_size > 0) {
       finalCarry = -1;
@@ -892,7 +929,7 @@ printf("\n\n");
     printOutput(finalSum, my_output_file);
 
     if(testing_RunTime) { //Timing things?
-      fprintf(my_output_file, "\nTime:%lf\n", finish_time - start_time);
+      //fprintf(my_output_file, "\nTime:%lf\n", finish_time - start_time);
       printf("Run Time: %lf\n", finish_time - start_time);
     }
 
