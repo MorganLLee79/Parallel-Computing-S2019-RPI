@@ -8,7 +8,7 @@
 
 //----From mpi_cla_io
 // Compile Code: mpicc -g -Wall leeh17_hw2.c -o leeh17_hw2.out
-// Example Run Code: mpirun -np 32 ./leeh17_hw2.out test_input_1.txt test_output_1.txt
+// Example Run Code: mpirun -np 32 ./leeh17_hw2.out tests/test_input_2.txt tests/output2.txt
 // Both input and output files will 524490 bytes in size. The two additional
 //    characters are due to a newline characters between each input and at the
 //    end of the file.
@@ -504,14 +504,14 @@ void step5() {
 
   //Calculate all sscl[]s
   sscl[0] = ssgl[0] || (sspl[0] && received);
-  printf("Rank%d: Set %d as sscl. g=%d || (p=%d && sscl=%d)\n", my_mpi_rank,
-    sscl[0], ssgl[0], sspl[0], received);
+  //printf("Rank%d: Set %d as sscl. g=%d || (p=%d && sscl=%d)\n", my_mpi_rank,
+  //  sscl[0], ssgl[0], sspl[0], received);
 
   for(i=1; i<nsupersections/my_mpi_size;i++) {
     sscl[i] = ssgl[i] || (sspl[i] && sscl[i-1]);
 
-    printf("Rank%d: Set %d as sscl. g=%d || (p=%d && sscl=%d); i=%d\n", my_mpi_rank,
-      sscl[i], ssgl[i], sspl[i], sscl[i-1], i);
+    //printf("Rank%d: Set %d as sscl. g=%d || (p=%d && sscl=%d); i=%d\n", my_mpi_rank,
+    //  sscl[i], ssgl[i], sspl[i], sscl[i-1], i);
   }
   
   //printf("Rank %d: Step5, checking indices. c=%d, g=%d, p=%d, last sscl=%d.\n", my_mpi_rank,
@@ -523,7 +523,8 @@ void step5() {
     MPI_Isend(&sscl[i-1], 1, MPI_INT, my_mpi_rank+1, 0, MPI_COMM_WORLD, &sendRequest);
     //MPI_Isend(&sspl[my_mpi_rank], 1, MPI_INT, my_mpi_rank+1, 1, MPI_COMM_WORLD, &req_p_send);
 
-    printf("Rank%d: Sent %d as sscl to rank %d.\n", my_mpi_rank, sscl[my_mpi_rank+i-1], my_mpi_rank+1);
+    //printf("Rank%d: Sent %d as sscl to rank %d.\n", my_mpi_rank, 
+    //  sscl[my_mpi_rank+i-1], my_mpi_rank+1);
   }
 
 
@@ -555,11 +556,13 @@ void step6() {
     
     //if(k < 30) {printf("step6: %d %d, %d\n", k, sscl[k/block_size], k/block_size); }
 
-    //printf("r%d: sscl=%d, at index %d\n", my_mpi_rank, sscl[k/block_size], k/block_size);
+    //if(k<80 && my_mpi_rank == 1) {
+    //printf("r%d: step6: sscl=%d, at index %d, %d; g=%d, p=%d\n", my_mpi_rank, 
+    //  sscl[k/block_size], k/block_size, k, sgk[k], spk[k]); }
     
     sck[k] = sgk[k] || (spk[k] && sscl[k/block_size]);
 
-    for(x=0; x<block_size;x++){  //Each group
+    for(x=1; x<block_size;x++){  //Each group
       sck[k+x] = sgk[k+x] || (spk[k+x] && sck[k+x-1]);
     }
   }
@@ -577,10 +580,14 @@ void step7() {
   for(j=0; j < ngroups/my_mpi_size; j = j + block_size) {
 //    if(j > 430 && j < 460) {printf("step7:_%d %d, %d, %d.\n", j, ggj[j], gpj[j], sck[j/8]); }
 
-    
+    //if(j<80 && my_mpi_rank == 1) {
+    //printf("r%d: step7: sck=%d, at index %d, %d; g=%d, p=%d\n", my_mpi_rank, 
+    //  sck[j/block_size], j/block_size, j, ggj[j], gpj[j]); }
+
+
     gcj[j] = ggj[j] || (gpj[j] && sck[j/block_size]);
 
-    for(x=0; x<block_size;x++){  //Each group
+    for(x=1; x<block_size;x++){  //Each group
       gcj[j+x] = ggj[j+x] || (gpj[j+x] && gcj[j+x-1]);
     }
 
@@ -603,9 +610,14 @@ void step8() {
 
 //    if(i < 3550 && i > 3560) {printf("stepblock_size:_%d %d, %d\n", i, gcj[i/block_size], i+x); }
     
+    //if(i<80 && my_mpi_rank == 1) {
+    //printf("r%d: step8: gcj=%d, at index %d, %d; g=%d, p=%d\n", my_mpi_rank, 
+    //  gcj[i/block_size], i/block_size, i, gi[i], pi[i]); }
+
+
     ci[i] = gi[i] || (pi[i] && gcj[i/block_size]);
 
-    for(x=0; x<block_size;x++){  //Each group
+    for(x=1; x<block_size;x++){  //Each group
       ci[i+x] = gi[i+x] || (pi[i+x] && ci[i+x-1]);
 
       //if(i < 20 && my_mpi_rank == 0) {printf("step8: %d %d, %d\n", i+x, pi[i+x], ci[i+x]); }
@@ -628,7 +640,13 @@ void step9() {
   //bin2[i] = b_i
 
   //sumi[i] = gi[i] ^ pi[i] ^ 0; //0 represents nothing being carried in, since first index
-  sumi[i] = bin1[i] ^ bin2[i] ^ 0;
+  if(my_mpi_rank > 0) {           //Use the received sscl value (? TODO assess again)
+    sumi[i] = bin1[i] ^ bin2[i] ^ sscl[0];
+  } else if(my_mpi_rank == 0) {   //rank 0 just uses 0 as the carry in value
+    sumi[i] = bin1[i] ^ bin2[i] ^ 0;
+  } else{
+    printf("ERROR: Negative rank ran in step 9? Rank:%d.\n", my_mpi_rank);
+  }
   //if(i < 80 && my_mpi_rank == 0) { printf("-"); }
 
   //This would actually be a parallel.
