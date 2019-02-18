@@ -564,6 +564,11 @@ void step6() {
 
     for(x=1; x<block_size;x++){  //Each group
       sck[k+x] = sgk[k+x] || (spk[k+x] && sck[k+x-1]);
+
+
+      if(k+x==511 && my_mpi_rank == 1) {
+      printf("r%d: step6: sck=%d, at index %d, %d; g=%d, p=%d. result=%d\n", my_mpi_rank, 
+        sck[k+x-1], k/block_size, k+x, sgk[k+x], spk[k+x], sck[k+x]); }
     }
   }
   //sck[0] = 0;
@@ -580,15 +585,20 @@ void step7() {
   for(j=0; j < ngroups/my_mpi_size; j = j + block_size) {
 //    if(j > 430 && j < 460) {printf("step7:_%d %d, %d, %d.\n", j, ggj[j], gpj[j], sck[j/8]); }
 
-    //if(j<80 && my_mpi_rank == 1) {
-    //printf("r%d: step7: sck=%d, at index %d, %d; g=%d, p=%d\n", my_mpi_rank, 
-    //  sck[j/block_size], j/block_size, j, ggj[j], gpj[j]); }
+    if(j==16382 && my_mpi_rank == 1) {
+    printf("r%d: step7: sck=%d, at index %d, %d; g=%d, p=%d. result=%d\n", my_mpi_rank, 
+      sck[j/block_size], j/block_size, j, ggj[j], gpj[j], gcj[j+x]); }
 
 
     gcj[j] = ggj[j] || (gpj[j] && sck[j/block_size]);
 
     for(x=1; x<block_size;x++){  //Each group
       gcj[j+x] = ggj[j+x] || (gpj[j+x] && gcj[j+x-1]);
+
+
+      if(j+x==16382 && my_mpi_rank == 1) {
+      printf("r%d: step7: gcj=%d, at index %d, %d; g=%d, p=%d. result=%d\n", my_mpi_rank, 
+        gcj[j+x-1], j/block_size, j+x, ggj[j+x], gpj[j+x], gcj[j+x]); }
     }
 
 //      if(j > 430 && j < 460) {printf("step7: %d %d, %d, %d.\n", 
@@ -609,17 +619,19 @@ void step8() {
   for(i=0; i < bits/my_mpi_size; i = i + block_size) {
 
 //    if(i < 3550 && i > 3560) {printf("stepblock_size:_%d %d, %d\n", i, gcj[i/block_size], i+x); }
-    
-    //if(i<80 && my_mpi_rank == 1) {
-    //printf("r%d: step8: gcj=%d, at index %d, %d; g=%d, p=%d\n", my_mpi_rank, 
-    //  gcj[i/block_size], i/block_size, i, gi[i], pi[i]); }
-
 
     ci[i] = gi[i] || (pi[i] && gcj[i/block_size]);
+
+    if(i<524250 && i > 524200 && my_mpi_rank == 1) {
+    printf("r%d: step8: gcj=%d, at index %d, %d; g=%d, p=%d; result = %d\n", my_mpi_rank, 
+      gcj[i/block_size], i/block_size, i, gi[i], pi[i], ci[i]); }
 
     for(x=1; x<block_size;x++){  //Each group
       ci[i+x] = gi[i+x] || (pi[i+x] && ci[i+x-1]);
 
+      if(i<524250 && i > 524200 && x < 8&& my_mpi_rank == 1) {
+      printf("r%d: step8: c used=%d, at index %d; g=%d, p=%d; result = %d\n", my_mpi_rank, 
+        ci[i+x-1], i+x, gi[i+x], pi[i+x], ci[i+x]); }
       //if(i < 20 && my_mpi_rank == 0) {printf("step8: %d %d, %d\n", i+x, pi[i+x], ci[i+x]); }
     }
   }
@@ -663,23 +675,24 @@ void step9() {
   //Now gather the parts from each rank
   if(my_mpi_rank == 1) {
     //printf("-");
-    for(i=0;i<5;i++) { //bits/my_mpi_size;i+=1024){
+    for(i=bits/my_mpi_size-68+1;i<bits/my_mpi_size-58;i++) { //bits/my_mpi_size;i+=1024){
+      //printf("%d", sumi[i]);
       //printf(",%d%d", ci[i-1], ci[i]);
-      printf("sum=%d, c=%d, g=%d, p=%d, b1=%d, b2=%d\n",
-        sumi[i], ci[i], gi[i], pi[i], bin1[i], bin2[i]);
+      printf("rank %d: sum=%d, c=%d, g=%d, p=%d, b1=%d, b2=%d.i=%d\n", my_mpi_rank,
+        sumi[i], ci[i-1], gi[i], pi[i], bin1[i], bin2[i], i);
     }
     //printf("Step8\nc[0] = %d, g=%d, p=%d, gcj=%d\n", ci[0], gi[0], pi[0], gcj[0]);
     printf("What is at 16384?\n");
-  } else if(my_mpi_rank == 0) {
-    //Print last 5 bits
-    for(i=bits/my_mpi_size-5;i<bits/my_mpi_size;i++) { //bits/my_mpi_size;i+=1024){
+  } /*else if(my_mpi_rank == 0) {
+    //Print last 8 bits
+    for(i=bits/my_mpi_size-8;i<bits/my_mpi_size;i++) { //bits/my_mpi_size;i+=1024){
       //printf(",%d%d", ci[i-1], ci[i]);
       printf("rank 0: sum=%d, c=%d, g=%d, p=%d, b1=%d, b2=%d\n",
         sumi[i], ci[i], gi[i], pi[i], bin1[i], bin2[i]);
     }
     //printf("Step8\nc[0] = %d, g=%d, p=%d, gcj=%d\n", ci[0], gi[0], pi[0], gcj[0]);
     printf("What is at 16384?\n");
-  }
+  }*/
 
   /*
   i = 48;
@@ -855,17 +868,19 @@ for(i=0; i<bits;i++){
 
 
   rippleSum[i] = inputBin1[i] ^ inputBin2[i] ^ oldC;
-  oldC = g || (p && oldC);
 
-  if(i>524190 && i<524196+8){//i % 1024 == 0 && i/1024 < 80){  //Testing
-    printf("Ripple: sum=%d, oldC=%d, gi=%d, pi=%d:b1=%d or b2=%d.\n", 
-      rippleSum[i], oldC, g, p, inputBin1[i], inputBin2[i]);
+
+  if(i>bits-68 && i<bits-58){//i % 1024 == 0 && i/1024 < 80){  //Testing
+    printf("Ripple: sum=%d, oldC=%d, gi=%d, pi=%d:b1=%d or b2=%d. i=%d\n", 
+      rippleSum[i], oldC, g, p, inputBin1[i], inputBin2[i], i - bits/my_mpi_size);
     //printf(",%d%d", oldC, g||(p&&oldC));
     //printf("%d", rippleSum[i]);//oldC);
-
   }
+
+  oldC = g || (p && oldC);
+
 }
-printf("\n\n");
+printf("\n");
 //char* temp = convertToHexString(rippleSum);
 //temp[80] = '\0';
 //printf("Ripple Carry Test Results:\n%s\n\n", temp+digits-50);
