@@ -550,7 +550,9 @@ void step5() {
 void step6v2() {
   int k;
   for(k=0; k<ngroups/my_mpi_size;k++) {
-    if(k%block_size == 0) {
+    if(k == 0) {
+      sck[k] = sgk[k] || (spk[k] && received);
+    } else if(k%block_size == 0) {
       sck[k] = sgk[k] || (spk[k] && sscl[(k/block_size)-1]);
     } else {
       sck[k] = sgk[k] || (spk[k] && sck[k-1]);
@@ -604,7 +606,9 @@ void step6() {
 void step7v2() {
   int j;
   for(j=0; j<ngroups/my_mpi_size;j++) {
-    if(j%block_size == 0) {
+    if(j==0) {
+      gcj[j] = ggj[j] || (gpj[j] && received);
+    } else if(j%block_size == 0) {
       gcj[j] = ggj[j] || (gpj[j] && sck[(j/block_size)-1]);
     } else {
       gcj[j] = ggj[j] || (gpj[j] && gcj[j-1]);
@@ -661,7 +665,9 @@ void step7() {
 void step8v2() {
   int i;
   for(i=0;i<bits/my_mpi_size;i++){
-    if(i%block_size == 0) {
+    if(i==0) {
+      ci[i] = gi[i] || (pi[i] && received);
+    } else if(i%block_size == 0) {
       ci[i] = gi[i] || (pi[i] && gcj[(i/block_size)-1]);
     } else {
       ci[i] = gi[i] || (pi[i] && ci[i-1]);
@@ -721,7 +727,7 @@ void step9() {
 
   //sumi[i] = gi[i] ^ pi[i] ^ 0; //0 represents nothing being carried in, since first index
   if(my_mpi_rank > 0) {           //Use the received sscl value (? TODO assess again)
-    sumi[i] = bin1[i] ^ bin2[i] ^ ci[0];
+    sumi[i] = bin1[i] ^ bin2[i] ^ received;
     //printf("___ran using sscl[0]=%d, rank=%d. sum=%d\n", ci[0], my_mpi_rank, sumi[i]);
   } else if(my_mpi_rank == 0) {   //rank 0 just uses 0 as the carry in value
     sumi[i] = bin1[i] ^ bin2[i] ^ 0;
@@ -742,21 +748,21 @@ void step9() {
   }
 
   //Now gather the parts from each rank
-  if(my_mpi_rank == 1) {
+  /*if(my_mpi_rank == 1) {
     //printf("-");
     //printf("rank %d: -sum=%d, c=%d, g=%d, p=%d, b1=%d, b2=%d.i=%d\n", my_mpi_rank,
     //  sumi[0], sscl[0], gi[0], pi[0], bin1[0], bin2[0], (bits/my_mpi_size));
     //for(i=bits/my_mpi_size-68+1;i<bits/my_mpi_size-58;i++) { //bits/my_mpi_size;i+=1024){
 
-    for(i=bits/my_mpi_size-130;i<bits/my_mpi_size-120;i++){
+    for(i=bits/2;i<bits/2+8;i++){
       //printf("%d", sumi[i]);
       //printf(",%d%d", ci[i-1], ci[i]);
-      printf("rank %d: sum=%d, c=%d, g=%d, p=%d, b1=%d, b2=%d.i=%d\n", my_mpi_rank,
+      /printf("rank %d: sum=%d, c=%d, g=%d, p=%d, b1=%d, b2=%d.i=%d\n", my_mpi_rank,
         sumi[i], ci[i-1], gi[i], pi[i], bin1[i], bin2[i], i+(bits/my_mpi_size));
     }
     //printf("Step8\nc[0] = %d, g=%d, p=%d, gcj=%d\n", ci[0], gi[0], pi[0], gcj[0]);
     printf("transferring/using carries correctly Check p?\n");
-  } /*else if(my_mpi_rank == 0) {
+  } else if(my_mpi_rank == 0) {
     //Print last 8 bits
     for(i=bits/my_mpi_size-8;i<bits/my_mpi_size;i++) { //bits/my_mpi_size;i+=1024){
       //printf(",%d%d", ci[i-1], ci[i]);
@@ -928,6 +934,7 @@ int main(int argc, char** argv){
     fclose( my_input_file );
     //fclose( my_output_file );
 
+/*
 int rippleSum[bits] = {0};
 int oldC = 0;
 int g=0;
@@ -943,7 +950,7 @@ for(i=0; i<bits;i++){
   rippleSum[i] = inputBin1[i] ^ inputBin2[i] ^ oldC;
 
 
-  if(i>=bits-130 && i<bits-120){//i % 1024 == 0 && i/1024 < 80){  //Testing
+  if(i>=bits/2 && i<bits/2+8){//i % 1024 == 0 && i/1024 < 80){  //Testing
     printf("Ripple: sum=%d, C=%d, gi=%d, pi=%d:b1=%d or b2=%d. i=%d\n", 
       rippleSum[i], oldC, g, p, inputBin1[i], inputBin2[i], i);
     //printf(",%d%d", oldC, g||(p&&oldC));
@@ -957,7 +964,7 @@ printf("\n");
 //char* temp = convertToHexString(rippleSum);
 //temp[80] = '\0';
 //printf("Ripple Carry Test Results:\n%s\n\n", temp+digits-50);
-
+*/
 
   }
 
