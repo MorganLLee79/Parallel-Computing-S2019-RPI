@@ -346,15 +346,15 @@ void step2() {
     tempGG = 0;
     tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempGP = pi[i];
-    for(x = block_size-2; x >= 0; x = x - 1) { //Iterate through the block backwards
+    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
       tempPropagates[x] = tempPropagates[x+1] && pi[i+x];
-      
+
       //if(j < 2) {printf("%d: %d\n", x, tempPropagates[x]);}
     }
 
     for(x = 0; x < block_size; x++) {
       tempGG = tempGG || (tempPropagates[x] && gi[i+x]);
-      tempGP = tempGP || pi[i+x];
+      tempGP = tempGP && pi[i+x];
     }
 
     ggj[j] = tempGG;
@@ -392,7 +392,7 @@ void step3() {
     tempSG = 0;
     tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempSP = gpj[j];
-    for(x = block_size-2; x >= 0; x = x - 1) { //Iterate through the block backwards
+    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
       tempPropagates[x] = tempPropagates[x+1] && gpj[j+x];
     }
 
@@ -400,7 +400,7 @@ void step3() {
     for(x = 0; x < block_size; x++) {
       //Temps represent the sum of all earlier values
       tempSG = tempSG || (tempPropagates[x] && ggj[j+x]);
-      tempSP = tempSP || gpj[j+x];
+      tempSP = tempSP && gpj[j+x];
     }
 
     sgk[k] = tempSG;
@@ -439,15 +439,15 @@ void step4() {
     tempSSG = 0;
     tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempSSP = spk[k];
-    for(x = block_size-2; x >= 0; x = x - 1) { //Iterate through the block backwards
+    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
       tempPropagates[x] = tempPropagates[x+1] && spk[k+x];
     }
 
     //TODO save array of propagate sets, and in?
-    for(x = 0; x < block_size; x++) {
+    for(x = 1; x < block_size; x++) {
       //Temps represent the sum of all earlier values
       tempSSG = tempSSG || (tempPropagates[x] && sgk[k+x]);
-      tempSSP = tempSSP || spk[k+x];
+      tempSSP = tempSSP && spk[k+x];
     }
 
     ssgl[l] = tempSSG;
@@ -547,6 +547,16 @@ void step5() {
   //printf("-Step 5\n");
 }
 
+void step6v2() {
+  int k;
+  for(k=0; k<ngroups/my_mpi_size;k++) {
+    if(k%block_size == 0) {
+      sck[k] = sgk[k] || (spk[k] && sscl[(k/block_size)-1]);
+    } else {
+      sck[k] = sgk[k] || (spk[k] && sck[k-1]);
+    }
+  }
+}
 
 //Calculate sc_k using sg_k and sp_k and correct ssc_l, l==k div 8 as
 //  super sectional carry-in for all sections k
@@ -558,26 +568,27 @@ void step6() {
     
     //if(k < 30) {printf("step6: %d %d, %d\n", k, sscl[k/block_size], k/block_size); }
 
-    //if(k<80 && my_mpi_rank == 1) {
-    //printf("r%d: step6: sscl=%d, at index %d, %d; g=%d, p=%d\n", my_mpi_rank, 
-    //  sscl[k/block_size], k/block_size, k, sgk[k], spk[k]); }
-    
+    /*
     int carryIn;
     if(k == 0) {
       carryIn = sscl[0];
     } else {
       carryIn = sscl[(k/block_size)];
     }
+    sck[k] = sgk[k] || (spk[k] && carryIn); */
+    sck[k] = sgk[k] || (spk[k] && sscl[k/block_size-1]);
 
-    sck[k] = sgk[k] || (spk[k] && carryIn);
+    //if(k<80 && my_mpi_rank == 1) {
+    //printf("r%d: step6: sscl=%d, at index %d, %d; g=%d, p=%d. result=%d\n", my_mpi_rank, 
+    //  sscl[k/block_size], k/block_size, k, sgk[k], spk[k], sck[k]); }
 
     for(x=1; x<block_size;x++){  //Each group
       sck[k+x] = sgk[k+x] || (spk[k+x] && sck[k+x-1]);
 
 
-      if(k+x<=511 && k+x > 508 && my_mpi_rank == 1) {
-      printf("r%d: step6: sck=%d, at index %d, %d; g=%d, p=%d. result=%d\n", my_mpi_rank, 
-        sck[k+x-1], k/block_size, k+x, sgk[k+x], spk[k+x], sck[k+x]); }
+      //if(k+x<=511 && k+x > 508 && my_mpi_rank == 1) {
+      //printf("r%d: step6: sck=%d, at index %d, %d; g=%d, p=%d. result=%d\n", my_mpi_rank, 
+      //  sck[k+x-1], k/block_size, k+x, sgk[k+x], spk[k+x], sck[k+x]); }
     }
 
     /*if(k == 0) {
@@ -590,6 +601,17 @@ void step6() {
   //printf("step6:_sck[56]:%d %d, %d, %d.\n", sck[56], sgk[56], spk[56], sscl[7]);
 }
 
+void step7v2() {
+  int j;
+  for(j=0; j<ngroups/my_mpi_size;j++) {
+    if(j%block_size == 0) {
+      gcj[j] = ggj[j] || (gpj[j] && sck[(j/block_size)-1]);
+    } else {
+      gcj[j] = ggj[j] || (gpj[j] && gcj[j-1]);
+    }
+  }
+}
+
 //Calculate gc_j using gg_j, gp_j, and correct sc_k, k = j div 8 as sectional carry-in for all groups j
 void step7() {
   int j;
@@ -599,26 +621,26 @@ void step7() {
   for(j=0; j < ngroups/my_mpi_size; j = j + block_size) {
 //    if(j > 430 && j < 460) {printf("step7:_%d %d, %d, %d.\n", j, ggj[j], gpj[j], sck[j/8]); }
 
-    if(j==16382 && my_mpi_rank == 1) {
-    printf("r%d: step7: sck=%d, at index %d, %d; g=%d, p=%d. result=%d\n", my_mpi_rank, 
-      sck[j/block_size], j/block_size, j, ggj[j], gpj[j], gcj[j+x]); }
+    //if(j==16382 && my_mpi_rank == 1) {
+    //printf("r%d: step7: sck=%d, at index %d, %d; g=%d, p=%d. result=%d\n", my_mpi_rank, 
+    //  sck[j/block_size], j/block_size, j, ggj[j], gpj[j], gcj[j+x]); }
 
-    int carryIn;
+    /*int carryIn;
     if(j == 0) {
       carryIn = sck[0];
     } else {
       carryIn = sck[(j/block_size)];
     }
-
-    gcj[j] = ggj[j] || (gpj[j] && carryIn);
+    gcj[j] = ggj[j] || (gpj[j] && carryIn);*/
+    gcj[j] = ggj[j] || (gpj[j] && sck[j/block_size-1]);
 
     for(x=1; x<block_size;x++){  //Each group
       gcj[j+x] = ggj[j+x] || (gpj[j+x] && gcj[j+x-1]);
 
 
-      if(j+x<=16382 && j==16352 && my_mpi_rank == 1) {
-      printf("r%d: step7: gcj=%d, at index %d, %d; g=%d, p=%d. result=%d\n", my_mpi_rank, 
-        gcj[j+x-1], j/block_size, j+x, ggj[j+x], gpj[j+x], gcj[j+x]); }
+      //if(j+x<=16382 && j==16352 && my_mpi_rank == 1) {
+      //printf("r%d: step7: gcj=%d, at index %d, %d; g=%d, p=%d. result=%d\n", my_mpi_rank, 
+      //  gcj[j+x-1], j/block_size, j+x, ggj[j+x], gpj[j+x], gcj[j+x]); }
     }
 
 
@@ -636,6 +658,17 @@ void step7() {
   //printf("Step 7: sck:%d, %d\n", sck[0], j);
 }
 
+void step8v2() {
+  int i;
+  for(i=0;i<bits/my_mpi_size;i++){
+    if(i%block_size == 0) {
+      ci[i] = gi[i] || (pi[i] && gcj[(i/block_size)-1]);
+    } else {
+      ci[i] = gi[i] || (pi[i] && ci[i-1]);
+    }
+  }
+}
+
 //Calculate c_i using g_i, p_i, and correct gc_j, j = i div 8 as group carry-in for all bits i
 void step8() {
   int i;
@@ -644,24 +677,25 @@ void step8() {
   for(i=0; i < bits/my_mpi_size; i = i + block_size) {
 
 //    if(i < 3550 && i > 3560) {printf("stepblock_size:_%d %d, %d\n", i, gcj[i/block_size], i+x); }
-    int carryIn;
+    /*int carryIn;
     if(i == 0) {
       carryIn = gcj[0];
     } else {
       carryIn = gcj[(i/block_size)];
     }
-    ci[i] = gi[i] || (pi[i] && carryIn);
+    ci[i] = gi[i] || (pi[i] && carryIn);*/
+    ci[i] = gi[i] || (pi[i] && gcj[i/block_size-1]);
 
-    if(i<524250 && i > 524200 && my_mpi_rank == 1) {
-    printf("r%d: step8: gcj=%d, at index %d, %d; g=%d, p=%d; result = %d\n", my_mpi_rank, 
-      gcj[i/block_size], i/block_size, i, gi[i], pi[i], ci[i]); }
+    //if(i<524250 && i > 524200 && my_mpi_rank == 1) {
+    //printf("r%d: step8: gcj=%d, at index %d, %d; g=%d, p=%d; result = %d\n", my_mpi_rank, 
+    //  gcj[i/block_size], i/block_size, i, gi[i], pi[i], ci[i]); }
 
     for(x=1; x<block_size;x++){  //Each group
       ci[i+x] = gi[i+x] || (pi[i+x] && ci[i+x-1]);
 
-      if(i<524250 && i > 524200 && x < 8&& my_mpi_rank == 1) {
-      printf("r%d: step8: c used=%d, at index %d; g=%d, p=%d; result = %d\n", my_mpi_rank, 
-        ci[i+x-1], i+x, gi[i+x], pi[i+x], ci[i+x]); }
+      //if(i<524250 && i > 524200 && x < 8&& my_mpi_rank == 1) {
+      //printf("r%d: step8: c used=%d, at index %d; g=%d, p=%d; result = %d\n", my_mpi_rank, 
+      //  ci[i+x-1], i+x, gi[i+x], pi[i+x], ci[i+x]); }
       //if(i < 20 && my_mpi_rank == 0) {printf("step8: %d %d, %d\n", i+x, pi[i+x], ci[i+x]); }
     }
 
@@ -687,8 +721,8 @@ void step9() {
 
   //sumi[i] = gi[i] ^ pi[i] ^ 0; //0 represents nothing being carried in, since first index
   if(my_mpi_rank > 0) {           //Use the received sscl value (? TODO assess again)
-    sumi[i] = bin1[i] ^ bin2[i] ^ sscl[0];
-    printf("___ran using sscl[0]=%d, rank=%d. sum=%d\n", sscl[0], my_mpi_rank, sumi[i]);
+    sumi[i] = bin1[i] ^ bin2[i] ^ ci[0];
+    //printf("___ran using sscl[0]=%d, rank=%d. sum=%d\n", ci[0], my_mpi_rank, sumi[i]);
   } else if(my_mpi_rank == 0) {   //rank 0 just uses 0 as the carry in value
     sumi[i] = bin1[i] ^ bin2[i] ^ 0;
   } else{
@@ -710,11 +744,11 @@ void step9() {
   //Now gather the parts from each rank
   if(my_mpi_rank == 1) {
     //printf("-");
-    printf("rank %d: -sum=%d, c=%d, g=%d, p=%d, b1=%d, b2=%d.i=%d\n", my_mpi_rank,
-      sumi[0], sscl[0], gi[0], pi[0], bin1[0], bin2[0], (bits/my_mpi_size));
+    //printf("rank %d: -sum=%d, c=%d, g=%d, p=%d, b1=%d, b2=%d.i=%d\n", my_mpi_rank,
+    //  sumi[0], sscl[0], gi[0], pi[0], bin1[0], bin2[0], (bits/my_mpi_size));
     //for(i=bits/my_mpi_size-68+1;i<bits/my_mpi_size-58;i++) { //bits/my_mpi_size;i+=1024){
 
-    for(i=1;i<10;i++){
+    for(i=bits/my_mpi_size-130;i<bits/my_mpi_size-120;i++){
       //printf("%d", sumi[i]);
       //printf(",%d%d", ci[i-1], ci[i]);
       printf("rank %d: sum=%d, c=%d, g=%d, p=%d, b1=%d, b2=%d.i=%d\n", my_mpi_rank,
@@ -722,7 +756,7 @@ void step9() {
     }
     //printf("Step8\nc[0] = %d, g=%d, p=%d, gcj=%d\n", ci[0], gi[0], pi[0], gcj[0]);
     printf("transferring/using carries correctly Check p?\n");
-  } else if(my_mpi_rank == 0) {
+  } /*else if(my_mpi_rank == 0) {
     //Print last 8 bits
     for(i=bits/my_mpi_size-8;i<bits/my_mpi_size;i++) { //bits/my_mpi_size;i+=1024){
       //printf(",%d%d", ci[i-1], ci[i]);
@@ -731,7 +765,7 @@ void step9() {
     }
     //printf("Step8\nc[0] = %d, g=%d, p=%d, gcj=%d\n", ci[0], gi[0], pi[0], gcj[0]);
     printf("What is at 16384?\n");
-  }
+  }*/
 
   /*
   i = 48;
@@ -752,36 +786,36 @@ void step9() {
 void cla(int runBarriers) {
 
   step1();  //Initial gi and pi generation
-  if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
+  //if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
   //if(my_mpi_rank == 0) { printf("STEP1.\n"); }
   step2();
-  if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
+  //if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
   //if(my_mpi_rank == 0) { printf("STEP2.\n"); }
   step3();
-  if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
+  //if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
   //if(my_mpi_rank == 0) { printf("STEP3.\n"); }
   step4();
-  if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
+  //if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
   //if(my_mpi_rank == 0) { printf("STEP4.\n"); }
 
   step5();  //Merging carry values
-  if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
+  //if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
   //if(my_mpi_rank == 0) { printf("STEP5.\n"); }
 
-  step6();
-  if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
+  step6v2();
+  //if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
   //if(my_mpi_rank == 0) { printf("STEP6.\n"); }
   
-  step7();
-  if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
+  step7v2();
+  //if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
   //if(my_mpi_rank == 0) { printf("STEP7.\n"); }
   
-  step8();
-  if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
+  step8v2();
+  //if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
   //if(my_mpi_rank == 0) { printf("STEP8.\n"); }
   
   step9();  //Final summing
-  if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
+  //if(runBarriers == 1) {MPI_Barrier(MPI_COMM_WORLD); }
   //if(my_mpi_rank == 0) { printf("STEP9.\n"); }
 
   //Sum has now been set! It is a binary array, with most significant bit being at sumi[4095]
@@ -909,8 +943,8 @@ for(i=0; i<bits;i++){
   rippleSum[i] = inputBin1[i] ^ inputBin2[i] ^ oldC;
 
 
-  if(i>bits/2-5 && i<bits/2+5){//(i>bits-68 && i<bits-58){//i % 1024 == 0 && i/1024 < 80){  //Testing
-    printf("Ripple: sum=%d, oldC=%d, gi=%d, pi=%d:b1=%d or b2=%d. i=%d\n", 
+  if(i>=bits-130 && i<bits-120){//i % 1024 == 0 && i/1024 < 80){  //Testing
+    printf("Ripple: sum=%d, C=%d, gi=%d, pi=%d:b1=%d or b2=%d. i=%d\n", 
       rippleSum[i], oldC, g, p, inputBin1[i], inputBin2[i], i);
     //printf(",%d%d", oldC, g||(p&&oldC));
     //printf("%d", rippleSum[i]);//oldC);
