@@ -5,17 +5,16 @@
 
 
 /***** Data Structures (Provided) *********/
-//Transfer with scp file.c username@mastiff.edu:hw2
 
 //----From mpi_cla_io
-// Compile Code: mpicc -g -Wall leeh17_hw2_v1.c -o leeh17_hw2.out
+// Compile Code: mpicc -g -Wall leeh17_hw2.c -o leeh17_hw2.out
 // Example Run Code: mpirun -np 32 ./leeh17_hw2.out tests/test_input_2.txt tests/output2.txt
 // Both input and output files will 524490 bytes in size. The two additional
 //    characters are due to a newline characters between each input and at the
 //    end of the file.
 
 
-#define testing_RunTime 0
+#define testing_RunTime 1
 #define testing_Barriers 1
 
 #define HEX_INPUT_SIZE 262144

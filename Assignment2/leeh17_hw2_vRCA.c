@@ -15,7 +15,7 @@
 //    end of the file.
 
 
-#define testing_RunTime 0
+#define testing_RunTime 1
 #define testing_Barriers 1
 
 #define HEX_INPUT_SIZE 262144
@@ -935,43 +935,60 @@ int main(int argc, char** argv){
     fclose( my_input_file );
     //fclose( my_output_file );
 
-/*
-int rippleSum[bits] = {0};
+//Begin timer
+int result;//rippleSum[bits] = {0};
 int oldC = 0;
 int g=0;
 int p=0;
 int i=0;
+double finish_time = -1;
+double start_time = MPI_Wtime();
+int x;
+for(x = 0; x<10;x++) {
+start_time = MPI_Wtime();
+
+//rippleSum[bits] = {0};
+oldC = 0;
+g=0;
+p=0;
+i=0;
 
 for(i=0; i<bits;i++){
 
-  g = inputBin1[i] && inputBin2[i];
-  p = inputBin1[i] || inputBin2[i];
+  //g = inputBin1[i] && inputBin2[i];
+  //p = inputBin1[i] || inputBin2[i];
 
 
-  rippleSum[i] = inputBin1[i] ^ inputBin2[i] ^ oldC;
+  //rippleSum[i]
+  result = inputBin1[i] ^ inputBin2[i] ^ oldC;
 
 
-  if(i>=bits/2 && i<bits/2+8){//i % 1024 == 0 && i/1024 < 80){  //Testing
+  /*if(i>=bits/2 && i<bits/2+8){//i % 1024 == 0 && i/1024 < 80){  //Testing
     printf("Ripple: sum=%d, C=%d, gi=%d, pi=%d:b1=%d or b2=%d. i=%d\n", 
       rippleSum[i], oldC, g, p, inputBin1[i], inputBin2[i], i);
     //printf(",%d%d", oldC, g||(p&&oldC));
     //printf("%d", rippleSum[i]);//oldC);
-  }
+  } */
 
   oldC = g || (p && oldC);
 
 }
-printf("\n");
+//printf("\n");
 //char* temp = convertToHexString(rippleSum);
 //temp[80] = '\0';
 //printf("Ripple Carry Test Results:\n%s\n\n", temp+digits-50);
-*/
+
+finish_time = MPI_Wtime();
+printf("%lf,",finish_time - start_time);
+}
+printf("\nresult=%d\n", result);
 
   }
-
+  
 
   //printf("Rank %d: Reached point before scatter\n", my_mpi_rank);
   MPI_Barrier(MPI_COMM_WORLD);
+  return 0; //Just testing RCA here
 
   //Begin timer
   double finish_time = -1;
