@@ -346,8 +346,8 @@ void step2() {
     tempGG = 0;
     tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempGP = pi[i];
-    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
-      tempPropagates[x] = tempPropagates[x+1] && pi[i+x];
+    for(x = block_size-2; x >= 0; x = x - 1) { //Iterate through the block backwards
+      tempPropagates[x] = tempPropagates[x+1] && pi[i+x+1];
 
       //if(j < 2) {printf("%d: %d\n", x, tempPropagates[x]);}
     }
@@ -392,8 +392,8 @@ void step3() {
     tempSG = 0;
     tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempSP = gpj[j];
-    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
-      tempPropagates[x] = tempPropagates[x+1] && gpj[j+x];
+    for(x = block_size-2; x >= 0; x = x - 1) { //Iterate through the block backwards
+      tempPropagates[x] = tempPropagates[x+1] && gpj[j+x+1];
     }
 
     //TODO save array of propagate sets, and in?
@@ -439,12 +439,12 @@ void step4() {
     tempSSG = 0;
     tempPropagates[block_size-1] = 1; //Default to true in order to ignore in ands
     tempSSP = spk[k];
-    for(x = block_size-2; x > 0; x = x - 1) { //Iterate through the block backwards
-      tempPropagates[x] = tempPropagates[x+1] && spk[k+x];
+    for(x = block_size-2; x >= 0; x = x - 1) { //Iterate through the block backwards
+      tempPropagates[x] = tempPropagates[x+1] && spk[k+x+1];
     }
 
     //TODO save array of propagate sets, and in?
-    for(x = 1; x < block_size; x++) {
+    for(x = 0; x < block_size; x++) {
       //Temps represent the sum of all earlier values
       tempSSG = tempSSG || (tempPropagates[x] && sgk[k+x]);
       tempSSP = tempSSP && spk[k+x];
