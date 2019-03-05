@@ -12,46 +12,43 @@
 
 //Values will be deterministic;
 //Example: bigarray[0] = 0 while bigarray[999999999%elementsperrank] = 999999999.
-MPI_LONG_LONG inputData[input_size];
-
-//WATCH MEM USAGE! inputData uses half the available per rank space!
-MPI_LONG_LONG localSum;
-MPI_LONG_LONG recvVal;
-
-//Starting and ending indices for this rank to cover
-int start;
-int end;
+long long inputData[input_size] = {0};
 
 //Track my mpi rank and total mpi size
 int mpiRank;
 int mpiSize;
 
 
-
-//
-MPI_LONG_LONG sum(int start, int end, MPI_LONG_LONG* input){
-	MPI_SUM
-}
-
-
 //The final intended function
+//How is count used? TODO
 void MPI_P2P_Reduce(void* send_data, void* recv_data, int count, MPI_Datatype datatype,
     MPI_Op op, int root, MPI_Comm communicator) {
 
 	if(op != MPI_SUM) {
-		printf("  WARNING r%d: Unknown operation in MPI_P2P_Reduce!\n", mpiRank);
-		return;
-	}
+		printf("  WARNING r%d: Unknown operation in MPI_P2P_Reduce!\n", mpiRank); return; }
+	if(datatype != MPI_LONG_LONG) {
+		printf("  WARNING r%d: Unknown datatype in MPI_P2P_Reduce!\n", mpiRank); return; }
+
 	if(root != 0) {
 		printf("  WARNING r%d: Unexpected root value. Changing to 0.\n", mpiRank);
 		root = 0;
 	}
 
+	//Initialize variables
+	long long localSum;
+	long long recvVal;
+
+	//Starting and ending indices for this rank to cover
+	int start;
+	int end;
+
 	int i;
 	//Allocate the parts of send_data to the corresponding ranks
-	int chunkSize = input_size / mpiSize;
+	int chunkSize = count / mpiSize;
 	start = mpiRank * chunkSize;
 	end = (mpiRank+1) * chunkSize;
+
+	printf("r%d: start=%d; end=%d\n", mpiRank, start, end);
 
 	//Sum this rank's part
 	localSum = 0;
@@ -60,38 +57,51 @@ void MPI_P2P_Reduce(void* send_data, void* recv_data, int count, MPI_Datatype da
 		localSum += inputData[i];
 	}
 
+	//Make sure eveyone is here
+	printf("r%d: Finished local sum, got total of %lld\n", mpiRank, localSum);
+	MPI_Barrier(MPI_COMM_WORLD);
+
 	//Share/ send/recv to the other ranks accordingly
 	int currStepSize;
 	
 	//Loop until one rank left; 0
 	//Increase step sizes; // 2: 0,1;2,3 -> 4: 0,2;4,6 -> 8: 0,4;8,12
-	for(currStepSize = 2;currStepSize<mpiSize;currStepSize = currStepSize * 2){
+	for(currStepSize = 2;currStepSize<=mpiSize; currStepSize = currStepSize * 2){
 		//Pairs are separated by currStepSize/2
 		int halfStep = currStepSize/2;
+
+		if(mpiRank == 0) { printf("---Entering step %d; halfStep=%d----\n", currStepSize, halfStep);}
 
 		MPI_Request recvRequest, sendRequest;
   		MPI_Status mpiStatus;
 
 		//Receiving ranks; 0;2 -> 0;4 -> -;8
-		if(mpiRank % currStepSize == 0 && mpiRank % (currStepSize*2) == 0) {
+		if(mpiRank % halfStep == 0 && mpiRank % currStepSize == 0) {
+			printf("r%d: step %d; receiving from %d\n", mpiRank, currStepSize, mpiRank+halfStep);
+			
 			MPI_Irecv(&recvVal, 1, MPI_LONG_LONG, mpiRank+halfStep, 0, MPI_COMM_WORLD, &recvRequest);
 			MPI_Wait(&recvRequest, &mpiStatus);  //Essentially makes recv blocking?
+
+			//Take in the recvVal, combine with local sum
+			localSum += recvVal;
+			printf("r%d: localSum=%lld, recvVal=%lld\n",mpiRank, localSum, recvVal);
 		}
 
 		//Sending ranks; 1;3 -> 2;6 -> 4->12
-		if(mpiRank % currStepSize == 0 && mpiRank % (currStepSize*2) == 1) {
-			MPI_Isend(localSum, 1, MPI_LONG_LONG, my_mpi_rank-halfStep, 0, MPI_COMM_WORLD, &sendRequest);
+		else if(mpiRank % halfStep == 0 && mpiRank % currStepSize == halfStep) {
+			printf("r%d: step %d; sending to %d value %lld\n",
+				mpiRank, currStepSize, mpiRank-halfStep, localSum);
+
+			MPI_Isend(&localSum, 1, MPI_LONG_LONG, mpiRank-halfStep, 0, MPI_COMM_WORLD, &sendRequest);
 		}
-
-		//All others are ignorable ranks; think rank 1 past iteration 4
-
-
-		//Take in the recvVal, combine with local sum
-		localSum
-
+		else {
+			//All others are ignorable ranks; think rank 1 past iteration 4
+			//printf("r%d: step %d; idling\n", mpiRank, currStepSize);
+		}
 
 		//Wait for all ranks to finish send/receiving
 		MPI_Barrier(MPI_COMM_WORLD);
+
 
 		//Repeat for next set of ranks/step sizes
 
@@ -101,32 +111,74 @@ void MPI_P2P_Reduce(void* send_data, void* recv_data, int count, MPI_Datatype da
 
 			//first
 			if()
-			MPI_Irecv(&received, 1, MPI_INT, my_mpi_rank-1, 0, MPI_COMM_WORLD, &recvRequest);
+			MPI_Irecv(&received, 1, MPI_LONG_LONG, my_mpi_rank-1, 0, MPI_COMM_WORLD, &recvRequest);
 			if()
 			second:
 			mpi_send
 		} */
 	}
+
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	//Return
+	if(mpiRank == 0) {
+		printf("Final value = %lld? TODO figure out how to return via recv_data\n", localSum);
+		recv_data += localSum;
+	}
 }
 
 //Begin program run here
 // Compile Code: mpicc -g -Wall leeh17_hw3.c -o leeh17_hw3.out
-// Example Run Code: mpirun -np 4 ./leeh17_hw3.out test_input_1.txt test_output_1.txt
+// Example Run Code: mpirun -np 4 ./leeh17_hw3.out
 //Prints output to standard output
 //Most of this will be a wrapping testing thing for MPI_P2P_Reduce to run it
 int main(int argc, char** argv){
 
+	//Initialize mpi
+	mpiSize = -1;
+	mpiRank = -1;
+
+	MPI_Init( &argc, &argv);
+	MPI_Comm_size(MPI_COMM_WORLD, &mpiSize);
+	MPI_Comm_rank(MPI_COMM_WORLD, &mpiRank);
+
+
+	//Intialize values
+	//localSum = malloc()
 
 	//Initialize inputData array; try to recycle for all!
 	int i;
-	for(i=0; i<input_size;i++) {
-		inputData[i] = i;
-	}
+	//if(mpiRank == 0) {	//Should only do once
+		for(i=0; i<input_size;i++) {
+			inputData[i] = i;
+		}
+		printf("Finished initalizing\n");
+	//}
+	MPI_Barrier(MPI_COMM_WORLD);
 
 
-	//Test mpi_sum
-	print("mpi_sum = %d\n", MPI_SUM);
+	int finalSum = 0;
 
-	MPI_P2P_Reduce(inputData, receiveData?, input_size?, MPI_LONG_LONG,
+	MPI_P2P_Reduce(inputData, &finalSum, input_size, MPI_LONG_LONG,
 		MPI_SUM, 0, MPI_COMM_WORLD);
+
+	if(mpiRank == 0) {printf("r%d: %d=final value\n", mpiRank, finalSum);}
+
+	MPI_Finalize();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
