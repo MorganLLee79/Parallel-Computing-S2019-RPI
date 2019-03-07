@@ -8,7 +8,7 @@
 //Expected output: 576,460,751,766,552,576; N*N- 1/2
 
 
-#define input_size 64//1073741824 // 1,073,741,824; 2^30
+#define input_size 256//1073741824 // 1,073,741,824; 2^30
 
 //Values will be deterministic;
 //Example: bigarray[0] = 0 while bigarray[999999999%elementsperrank] = 999999999.
