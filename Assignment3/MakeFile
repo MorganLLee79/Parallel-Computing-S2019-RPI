@@ -1,0 +1,11 @@
+
+
+module load gcc
+module load xl
+
+all:
+	mpixlc ~/barn/leeh17_hw3.c -o ~/barn/leeh17_hw3.xl
+
+debug:
+	
+	mpixlc -g ~/barn/leeh17_hw3.c -o ~/barn/leeh17_hw3.xl
