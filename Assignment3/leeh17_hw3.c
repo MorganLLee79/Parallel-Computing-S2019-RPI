@@ -25,7 +25,7 @@ unsigned long long start_cycles = 0;
 unsigned long long end_cycles = 0;
 
 
-#define input_size 1073741824 // 1,073,741,824; 2^30
+#define input_size 1073741824 // 1,073,741,824; 2^30; final answer = 576,460,751,766,552,576
 
 //Values will be deterministic;
 //Example: bigarray[0] = 0 while bigarray[999999999%elementsperrank] = 999999999.
@@ -63,7 +63,7 @@ void MPI_P2P_Reduce(void* send_data, void* recv_data, int count, MPI_Datatype da
 
 	//Sum this rank's part
 	localSum = 0;
-	for(i=start;i<end;i++){
+	for(i=0;i<input_size/mpiSize;i++){
 		//Need to split?
 		localSum += inputData[i];
 	}
@@ -167,9 +167,10 @@ int main(int argc, char** argv){
 	//printf("r%d: start=%d; end=%d\n", mpiRank, start, end);
 
 	//Allocate inputData
-	inputData = (long long *) malloc(chunkSize+1 * sizeof(long long));
-	for(i=start; i<end;i++) {
-		inputData[i] = i;
+	inputData = (long long *) malloc( (chunkSize+1) * sizeof(long long));
+	long long offset = chunkSize * mpiRank;
+	for(i=0; i<chunkSize;i++) {
+		inputData[i] = offset + i;
 	}
 	printf("rank %d finished initalizing\n", mpiRank);
 

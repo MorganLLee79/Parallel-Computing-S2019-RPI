@@ -8,28 +8,19 @@
 //Expected output: 576,460,751,766,552,576; N*N- 1/2
 
 
-//Timer stuff
-//Define depending on if on mastiff or BG/Q
-/*define onBGQ 1
-
-#ifdef onBGQ
-#include<hwi/include/bqc/A2_inlines.h>
-#else
-#define GetTimeBase MPI_Wtime
-#endif
 
 //Timer vars
 double timeSeconds = 0;
 double processorFreq = 1600000000.0;
 unsigned long long start_cycles = 0;
-unsigned long long end_cycles = 0;*/
+unsigned long long end_cycles = 0;
 
 
-#define input_size 1048576//1073741824 // 1,073,741,824; 2^30
+#define input_size 1048576 // 1,073,741,824; 2^30
 
 //Values will be deterministic;
 //Example: bigarray[0] = 0 while bigarray[999999999%elementsperrank] = 999999999.
-long long inputData[input_size] = {0};
+long long *inputData;
 
 //Track my mpi rank and total mpi size
 int mpiRank;
@@ -38,6 +29,7 @@ int mpiSize;
 //Starting and ending indices for this rank to cover
 int start;
 int end;
+
 
 //The final intended function
 //How is count used? TODO
@@ -62,7 +54,7 @@ void MPI_P2P_Reduce(void* send_data, void* recv_data, int count, MPI_Datatype da
 
 	//Sum this rank's part
 	localSum = 0;
-	for(i=start;i<end;i++){
+	for(i=0;i<input_size/mpiSize;i++){
 		//Need to split?
 		localSum += inputData[i];
 	}
@@ -140,11 +132,10 @@ void MPI_P2P_Reduce(void* send_data, void* recv_data, int count, MPI_Datatype da
 
 //Begin program run here
 // Compile Code: mpicc -g -Wall leeh17_hw3_local.c -o leeh17_hw3.out
-// Example Run Code: mpirun -np 4 ./leeh17_hw3.out
+// Example Run Code: mpirun -np 16 ./leeh17_hw3.out
 //Prints output to standard output
 //Most of this will be a wrapping testing thing for MPI_P2P_Reduce to run it
 int main(int argc, char** argv){
-
 	//Initialize mpi
 	mpiSize = -1;
 	mpiRank = -1;
@@ -153,6 +144,7 @@ int main(int argc, char** argv){
 	MPI_Comm_size(MPI_COMM_WORLD, &mpiSize);
 	MPI_Comm_rank(MPI_COMM_WORLD, &mpiRank);
 
+	if(mpiRank == 0) {printf("MPI Initialized\n");}
 
 	//Intialize values
 	//localSum = malloc()
@@ -165,10 +157,15 @@ int main(int argc, char** argv){
 	end = (mpiRank+1) * chunkSize;
 	//printf("r%d: start=%d; end=%d\n", mpiRank, start, end);
 
-	for(i=start; i<end;i++) {
-		inputData[i] = i;
+	//Allocate inputData
+	inputData = (long long *) malloc( (chunkSize+1) * sizeof(long long));
+
+	long long offset = chunkSize * mpiRank;
+	for(i=chunkSize-10; i<chunkSize;i++) {
+		inputData[i] = offset + i;
+		if(mpiRank == 0 && i > chunkSize - 1000) {printf("%d ", i);}
 	}
-	//printf("Finished initalizing\n");
+	printf("rank %d finished initalizing\n", mpiRank);
 
 	MPI_Barrier(MPI_COMM_WORLD);
 
@@ -176,7 +173,7 @@ int main(int argc, char** argv){
 	int finalSum = 0;
 	
 	//Start timer
-//	start_cycles = GetTimeBase();
+	//start_cycles = GetTimeBase();
 
 
 	MPI_P2P_Reduce(inputData, &finalSum, input_size, MPI_LONG_LONG,
@@ -184,14 +181,14 @@ int main(int argc, char** argv){
 
 
 	//End timer
-//	end_cycles = GetTimeBase();
-//	timeSeconds = ((double) (end_cycles - start_cycles)) / processorFreq;
+	//end_cycles = GetTimeBase();
+	//timeSeconds = ((double) (end_cycles - start_cycles)) / processorFreq;
 
 
 	//Print output
 	if(mpiRank == 0) {
 		//printf("r%d: %d=final value\n", mpiRank, finalSum);
-//		printf("Runtime = %ld", timeSeconds);
+		printf("Runtime = %f", timeSeconds);
 	}
 
 	MPI_Finalize();
