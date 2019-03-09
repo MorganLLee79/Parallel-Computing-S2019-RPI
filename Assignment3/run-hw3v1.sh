@@ -6,6 +6,7 @@
 
 #Run with: 
 #sbatch --partition debug --nodes 1 --time 15 ~/barn/run-hw3.sh
+#--mail-type and --mail-user values?
 srun --ntasks 64 --overcommit -o ~/scratch/output64.log ~/barn/leeh17_hw3.xl
 
 #Running batch of additional tests; full test requires more nodes

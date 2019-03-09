@@ -81,7 +81,7 @@ void MPI_P2P_Reduce(void* send_data, void* recv_data, int count, MPI_Datatype da
 		//Pairs are separated by currStepSize/2
 		int halfStep = currStepSize/2;
 
-		if(mpiRank == 0) { printf("---Entering step %d; halfStep=%d----\n", currStepSize, halfStep);}
+		//if(mpiRank == 0) { printf("---Entering step %d; halfStep=%d----\n", currStepSize, halfStep);}
 
 		MPI_Request recvRequest, sendRequest;
   		MPI_Status mpiStatus;
@@ -153,7 +153,7 @@ int main(int argc, char** argv){
 	MPI_Comm_size(MPI_COMM_WORLD, &mpiSize);
 	MPI_Comm_rank(MPI_COMM_WORLD, &mpiRank);
 
-	if(mpiRank == 0) {printf("MPI Initialized\n");}
+	//if(mpiRank == 0) {printf("MPI Initialized\n");}
 
 	//Intialize values
 	//localSum = malloc()
@@ -172,7 +172,7 @@ int main(int argc, char** argv){
 	for(i=0; i<chunkSize;i++) {
 		inputData[i] = offset + i;
 	}
-	printf("rank %d finished initalizing\n", mpiRank);
+	//printf("rank %d finished initalizing\n", mpiRank);
 
 	MPI_Barrier(MPI_COMM_WORLD);
 
