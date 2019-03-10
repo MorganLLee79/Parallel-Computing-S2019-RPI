@@ -1,0 +1,34 @@
+Notes
+
+-Just put stuff on an lp (landing pad), the files will copy over to q
+-module load _!
+-Final sum: 576,460,751,766,552,576
+
+	Commands:
+scp leeh17_hw3.c PCP8lhrr@lp02.ccni.rpi.edu:~/
+
+ssh PCP8lhrr@lp03.ccni.rpi.edu
+ssh q
+
+~ for /home/
+
+
+
+--Running on super computer
+salloc --nodes 1 --time 15 --partition debug
+srun --partition debug --time 15 --ntasks 64 --overcommit ~/barn/leeh17_hw3.xl
+exit
+
+
+alt:
+sbatch --partition debug --nodes 1 --time 15 ~/barn/run-hw3.sh
+
+
+-Ran this for testing larges, email updates
+sbatch --partition large --nodes 128 --time 15 --overcommit --mail-type end ~/barn/run-hw3_large.sh
+
+
+
+
+
+

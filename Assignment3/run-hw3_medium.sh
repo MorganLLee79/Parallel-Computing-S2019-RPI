@@ -10,8 +10,8 @@
 #srun --ntasks 64 --overcommit -o ~/scratch/output64.log ~/barn/leeh17_hw3.xl
 
 #Running batch of additional tests; full test requires more nodes
-#sbatch --partition medium --nodes 128 --time 15 ~/barn/run-hw3.sh
-srun --ntasks 8192 --overcommit -o ~/scratch/output8192.log ~/barn/leeh17_hw3.xl
+#sbatch --partition small --nodes 64 --time 15 ~/barn/run-hw3_medium.sh
+srun --ntasks 4096 --overcommit -o ~/scratch/output4096.log ~/barn/leeh17_hw3.xl
 
-srun --ntasks 8192 --overcommit -o ~/scratch/output8192_mpiReduce.log ~/barn/leeh17_hw3_mpiReduce.xl
+srun --ntasks 4096 --overcommit -o ~/scratch/output4096_mpiReduce.log ~/barn/leeh17_hw3_mpiReduce.xl
 
