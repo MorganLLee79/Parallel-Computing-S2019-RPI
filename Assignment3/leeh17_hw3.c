@@ -10,7 +10,7 @@
 
 //Timer stuff
 //Define depending on if on mastiff or BG/Q
-#define onBGQ 1
+#define onBGQ 0
 
 #ifdef onBGQ
 #include<hwi/include/bqc/A2_inlines.h>
@@ -25,7 +25,7 @@ unsigned long long start_cycles = 0;
 unsigned long long end_cycles = 0;
 
 
-#define input_size 1073741824 // 1,073,741,824; 2^30; final answer = 576,460,751,766,552,576
+#define input_size 1048576//1073741824 // 1,073,741,824; 2^30; final answer = 576,460,751,766,552,576
 
 //Values will be deterministic;
 //Example: bigarray[0] = 0 while bigarray[999999999%elementsperrank] = 999999999.
@@ -191,11 +191,38 @@ int main(int argc, char** argv){
 	end_cycles = GetTimeBase();
 	timeSeconds = ((double) (end_cycles - start_cycles)) / processorFreq;
 
+	//Print output
+	/*if(mpiRank == 0) {
+		//printf("$lld\n", mpiRank, finalSum);
+		//printf("Runtime = %f", timeSeconds);
+	}*/
+
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	//Begin testing with MPI_Reduce
+
+	//Initialize variables
+	long long localSum = 0;
+
+	//Sum this rank's part
+	for(i=0;i<input_size/mpiSize;i++){
+		//Need to split?
+		localSum += inputData[i];
+	}
+
+	//Make sure eveyone is here
+	//printf("r%d: Finished local sum, got total of %lld\n", mpiRank, localSum);
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	long long finalReduceSum;
+	MPI_Reduce(&localSum, &finalReduceSum, 1, MPI_LONG_LONG,
+		MPI_SUM, 0, MPI_COMM_WORLD);
 
 	//Print output
 	if(mpiRank == 0) {
-		//printf("r%d: %d=final value\n", mpiRank, finalSum);
-		printf("Runtime = %f", timeSeconds);
+		//printf("r%d: %d=final value\n", mpiRank, finalReduceSum);
+		printf("%lld\n", finalReduceSum);
+		//printf("Runtime = %f", timeSeconds);
 	}
 
 	MPI_Finalize();
