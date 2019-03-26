@@ -45,7 +45,7 @@ unsigned long long g_start_cycles = 0;
 unsigned long long g_end_cycles = 0;
 
 // TODO: temporary, probably replace with a function to handle ghost rows
-cell_t board[][] = {0};
+cell_t **board;
 
 // Per-experiment values
 /// Total number of threads to use for each rank, including the initial thread
@@ -56,11 +56,11 @@ int number_ticks;
 int rows_per_rank; // Use for getting RNG stream indices; [local_row +
                    // (rows_per_rank * mpiRank)]
 
-cell_t ghost_row_top[] = {0};
-cell_t ghost_row_bot[] = {0};
+cell_t *ghost_row_top;
+cell_t *ghost_row_bot;
 
 // Track the number of alive cells per tick
-int alive_cells[] = {0};
+int *alive_cells;
 
 /***************************************************************************/
 /* Function Decs ***********************************************************/
