@@ -18,9 +18,7 @@
 #include <mpi.h>
 #include <pthread.h>
 
-// #define BGQ 1 // when running BG/Q, comment out when testing on mastiff
-
-#ifdef BGQ
+#ifdef __bgq__
 #include <hwi/include/bqc/A2_inlines.h>
 #else
 #define GetTimeBase MPI_Wtime
