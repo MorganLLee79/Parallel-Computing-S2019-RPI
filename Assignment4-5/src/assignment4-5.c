@@ -54,7 +54,7 @@ double threshold;
 int number_ticks;
 
 int rows_per_rank; // Use for getting RNG stream indices; [local_row +
-                   // (rows_per_rank * mpiRank)]
+                   // (rows_per_rank * mpi_rank)]
 
 cell_t *ghost_row_top;
 cell_t *ghost_row_bot;
@@ -101,9 +101,9 @@ int main(int argc, char *argv[]) {
 
   // Set up initial variables
   // Experimental variables
-  if (argc != 4) {
-    printf("Error: Expecting threads_per_rank, threshold (0.25), and "
-           "number_ticks\n");
+  if (argc > 4) {
+    printf("Error: Expecting threads_per_rank, threshold (0.25), number_ticks, "
+           "output file path (if applicable)\n");
     return -1;
   }
   threads_per_rank = atoi(argv[1]);
@@ -177,8 +177,43 @@ int main(int argc, char *argv[]) {
   }
 
   // If needed for this run/experiment:
-  // Output using MPI_file_write_at
-  // Collect I/O performance from rank 0/thread 0
+  if (argc > 5) { // TODO temporarily set at compile time
+    // Output using MPI_file_write_at
+
+    // Start timer for i/o
+    unsigned long long io_start_time = GetTimeBase();
+
+    // Open relevant file
+    MPI_File io_output_file;
+    int file_status = MPI_File_open(MPI_COMM_WORLD, argv[4], MPI_MODE_CREATE,
+                                    MPI_INFO_NULL, &io_output_file);
+    if (file_status) {
+      printf("ERROR: Unable to create io output file %s.\n", argv[4]);
+    }
+
+    /*int MPI_File_write_at
+      (MPI_File fh, MPI_Offset offset, const void *buf,
+      int count, MPI_Datatype datatype, MPI_Status *status)*/
+    // Each mpi rank will write at it's spot in the file
+    int offset = mpi_rank * ROW_LENGTH * ROW_LENGTH / mpi_size;
+    int count = ROW_LENGTH * ROW_LENGTH / mpi_size;
+    MPI_Status io_status;
+    MPI_File_write_at(io_output_file, offset, board, count, MPI_INT,
+                      &io_status);
+
+    MPI_File_close(&io_output_file);
+
+    // Stop timer for i/o
+    unsigned long long io_end_time = GetTimeBase();
+
+    double io_time_in_secs =
+        ((double)(io_end_time - io_start_time) / g_processor_frequency);
+
+    // Collect I/O performance from rank 0/thread 0
+    if (mpi_rank == 0) {
+      printf("\nI/O run time: %lf\n\n", io_time_in_secs);
+    }
+  }
 
   // If needed for this run/experiment:
   // Construct heatmap of 32kx32k cell universe
@@ -188,6 +223,12 @@ int main(int argc, char *argv[]) {
 
   if (mpi_rank == 0) {
     // Print alive tick stats, compute (I/O if needed) performance stats
+    printf("Alive ticks:\n");
+    int i;
+    for (i = 0; i < number_ticks; i++) {
+      printf("%d\n", alive_cells[i]);
+    }
+    printf("\nTotal run time: %lf\n", g_time_in_secs);
   }
 
   // END -Perform a barrier and then leave MPI
