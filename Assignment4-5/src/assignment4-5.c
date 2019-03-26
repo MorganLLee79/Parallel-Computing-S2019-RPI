@@ -44,11 +44,8 @@ double g_processor_frequency = 1600000000.0; // processing speed for BG/Q
 unsigned long long g_start_cycles = 0;
 unsigned long long g_end_cycles = 0;
 
-// You define these
-double THRESHOLD = 0.0;
-
 // TODO: temporary, probably replace with a function to handle ghost rows
-cell_t board[32768][32768];
+cell_t board[ROW_LENGTH][ROW_LENGTH];
 
 // Per-experiment values
 int thread_per_node;
@@ -99,7 +96,7 @@ int main(int argc, char *argv[]) {
   // Set up initial variables
   // Experimental variables
   if (argc != 4) {
-    pritnf("Error: Expecting thread_per_node, threshold (0.25), and "
+    printf("Error: Expecting thread_per_node, threshold (0.25), and "
            "number_ticks\n");
     return -1;
   }
@@ -111,7 +108,7 @@ int main(int argc, char *argv[]) {
   // ghost_row = calloc? also type
 
   // Start recording time base
-  if (mpiRank == 0) {
+  if (mpi_rank == 0) {
     g_start_cycles = GetTimeBase();
   }
 
@@ -141,7 +138,7 @@ int main(int argc, char *argv[]) {
   // ticks
 
   // Stop timer
-  if (mpiRank == 0) {
+  if (mpi_rank == 0) {
     g_end_cycles = GetTimeBase();
     g_time_in_secs =
         ((double)(g_end_cycles - g_start_cycles) / g_processor_frequency);
@@ -157,7 +154,7 @@ int main(int argc, char *argv[]) {
   // Rank 0 will output the heat map to a standard unix file. Expecting small
   // 1-4MB size Import data for graphing
 
-  if (mpiRank == 0) {
+  if (mpi_rank == 0) {
     // Print alive tick stats, compute (I/O if needed) performance stats
   }
 
@@ -175,7 +172,7 @@ void update_cell(int row, int col) {
   cell_t old_state = board[row][col];
   cell_t new_state;
   // determine whether we follow GOL rules or randomize the cell state
-  if (GenVal(row) < THRESHOLD) {
+  if (GenVal(row) < threshold) {
     // set state to ALIVE or DEAD with 50-50 chance
     new_state = (int)lround(GenVal(row));
   } else {
