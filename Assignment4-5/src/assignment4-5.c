@@ -72,12 +72,13 @@ int *alive_cells;
  */
 void update_cell(int row, int col);
 
+void *run_simulation(int *thread_num);
+
 /***************************************************************************/
 /* Function: Main **********************************************************/
 /***************************************************************************/
 
 int main(int argc, char *argv[]) {
-  //    int i = 0;
   int mpi_rank;
   int mpi_size;
   // Example MPI startup and using CLCG4 RNG
@@ -106,8 +107,19 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   threads_per_rank = atoi(argv[1]);
-  threshold = atol(argv[2]);
+  threshold = atof(argv[2]);
   number_ticks = atoi(argv[3]);
+
+  // error handling
+  if (threads_per_rank <= 0) {
+    printf("Error: threads_per_rank must be greater than 0\n");
+    return -1;
+  }
+
+  if (number_ticks <= 0) {
+    printf("Error: number_ticks must be greater than 0\n");
+    return -1;
+  }
 
   // Start recording time base
   if (mpi_rank == 0) {
@@ -117,8 +129,6 @@ int main(int argc, char *argv[]) {
   // Allocate universe chunks and "ghost" rows
 
   // Initialize universe, all cells alive
-  int i;
-  int j;
   board = calloc(ROW_LENGTH, ROW_LENGTH / mpi_size);
   memset(board, ALIVE, ROW_LENGTH * ROW_LENGTH / mpi_size);
 
@@ -133,21 +143,28 @@ int main(int argc, char *argv[]) {
   memset(alive_cells, 0, number_ticks);
 
   // Create Pthreads, go into for-loop
-  for (i = 0; i < number_ticks; i++) { // TODO move to its own function?
-    // Exchange row data. MPI_Isend/Irecv from thread 0 within each MPI rank,
-    // with MPI_Test/Wait
-
-    // Note in pdf
-
-    // Every Pthread process its row. {make it its own function?}
-    // Checklist:
-    //-Update universe to use correct row rng stream
-    //-Factor in threshold percentages to rng values
-    //-Use correct ghost row data ayrank boundaries
-    //-Track number alive cells per tick across all threads in a rank group
-    //^Use Pthread_mutex_trylock around shared counter variables if needed
+  int *thread_num;
+  // allocate array to hold thread handles
+  pthread_t *threads = calloc(threads_per_rank - 1, sizeof *threads);
+  // create n-1 more threads
+  for (int i = 0; i < threads_per_rank - 1; ++i) {
+    thread_num = malloc(sizeof(int));
+    *thread_num = i + 1;
+    pthread_create(&threads[i], NULL, (void *(*)(void *))run_simulation,
+                   (void *)thread_num);
   }
+
+  // we are thread 0, so we need to run the simulation as well
+  thread_num = malloc(sizeof(int));
+  *thread_num = 0;
+  run_simulation(thread_num);
+
   // Simulation finished
+  // join all threads
+  for (int i = 0; i < threads_per_rank - 1; ++i) {
+    pthread_join(threads[i], NULL);
+  }
+  free(threads);
 
   // MPI_reduce sums of alive cells per tick; will be a vector (array) for all
   // ticks
@@ -182,6 +199,28 @@ int main(int argc, char *argv[]) {
 /***************************************************************************/
 /* Other Functions - You write as part of the assignment********************/
 /***************************************************************************/
+
+void *run_simulation(int *thread_num_param) {
+  /*int thread_num = *thread_num_param;*/
+  free(thread_num_param);
+  thread_num_param = NULL;
+  for (int i = 0; i < number_ticks; i++) {
+    // Exchange row data. MPI_Isend/Irecv from thread 0 within each MPI rank,
+    // with MPI_Test/Wait
+
+    // Note in pdf
+
+    // Every Pthread process its row. {make it its own function?}
+    // Checklist:
+    //-Update universe to use correct row rng stream
+    //-Factor in threshold percentages to rng values
+    //-Use correct ghost row data ayrank boundaries
+    //-Track number alive cells per tick across all threads in a rank group
+    //^Use Pthread_mutex_trylock around shared counter variables if needed
+  }
+
+  return NULL;
+}
 
 void update_cell(int row, int col) {
   cell_t old_state = board[row][col];
