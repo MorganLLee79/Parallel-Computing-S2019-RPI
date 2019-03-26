@@ -45,7 +45,7 @@ unsigned long long g_start_cycles = 0;
 unsigned long long g_end_cycles = 0;
 
 // TODO: temporary, probably replace with a function to handle ghost rows
-cell_t board[ROW_LENGTH][ROW_LENGTH];
+cell_t board[][] = {0};
 
 // Per-experiment values
 /// Total number of threads to use for each rank, including the initial thread
@@ -56,7 +56,11 @@ int number_ticks;
 int rows_per_rank; // Use for getting RNG stream indices; [local_row +
                    // (rows_per_rank * mpiRank)]
 
-int ghost_row[] = {0};
+cell_t ghost_row_top[] = {0};
+cell_t ghost_row_bot[] = {0};
+
+// Track the number of alive cells per tick
+int alive_cells[] = {0};
 
 /***************************************************************************/
 /* Function Decs ***********************************************************/
@@ -105,9 +109,6 @@ int main(int argc, char *argv[]) {
   threshold = atol(argv[2]);
   number_ticks = atoi(argv[3]);
 
-  // Ghost Rows/MPI variables
-  // ghost_row = calloc? also type
-
   // Start recording time base
   if (mpi_rank == 0) {
     g_start_cycles = GetTimeBase();
@@ -116,10 +117,23 @@ int main(int argc, char *argv[]) {
   // Allocate universe chunks and "ghost" rows
 
   // Initialize universe, all cells alive
+  int i;
+  int j;
+  board = calloc(ROW_LENGTH, ROW_LENGTH / mpi_size);
+  memset(board, ALIVE, ROW_LENGTH * ROW_LENGTH / mpi_size);
+
+  // Initialize/allocate ghost rows
+  ghost_row_top = calloc(sizeof(cell_t), ROW_LENGTH);
+  memset(ghost_row_top, ALIVE, ROW_LENGTH);
+  ghost_row_bot = calloc(sizeof(cell_t), ROW_LENGTH);
+  memset(ghost_row_bot, ALIVE, ROW_LENGTH);
+
+  // Initialize/allocate alive_cells
+  alive_cells = calloc(sizeof(int), number_ticks);
+  memset(alive_cells, 0, number_ticks);
 
   // Create Pthreads, go into for-loop
-  int i;
-  for (i = 0; i < number_ticks; i++) {
+  for (i = 0; i < number_ticks; i++) { // TODO move to its own function?
     // Exchange row data. MPI_Isend/Irecv from thread 0 within each MPI rank,
     // with MPI_Test/Wait
 
