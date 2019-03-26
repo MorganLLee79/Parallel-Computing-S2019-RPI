@@ -31,7 +31,7 @@
 #define ALIVE 1
 #define DEAD 0
 
-#define ROW_LENGTH 32768 //32,768
+#define ROW_LENGTH 32768  // 32,768
 
 /***************************************************************************/
 /* Global Vars *************************************************************/
@@ -44,12 +44,13 @@ unsigned long long g_end_cycles = 0;
 
 // You define these
 
-//Per-experiment values
+// Per-experiment values
 int thread_per_node;
 int threshold;
 int number_ticks;
 
-int rows_per_rank; //Use for getting RNG stream indices; [local_row + (rows_per_rank * mpiRank)]
+int rows_per_rank;  // Use for getting RNG stream indices; [local_row +
+                    // (rows_per_rank * mpiRank)]
 
 int ghostRow[] = {0};
 
@@ -84,6 +85,9 @@ int main(int argc, char *argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
 
   // Insert your code
+
+  // Set up initial variables
+
   // MPI already set up.
 
   // Start recording time base
@@ -91,50 +95,50 @@ int main(int argc, char *argv[]) {
     g_start_cycles = GetTimeBase();
   }
 
+  // Allocate universe chunks and "ghost" rows
 
-  //Allocate universe chunks and "ghost" rows
+  // Initialize universe, all cells alive
 
-  //Initialize universe, all cells alive
-
-  //Create Pthreads, go into for-loop
+  // Create Pthreads, go into for-loop
   int i;
-  for(i = 0; i < number_ticks; i++){
-    //Exchange row data. MPI_Isend/Irecv from thread 0 within each MPI rank, with MPI_Test/Wait
+  for (i = 0; i < number_ticks; i++) {
+    // Exchange row data. MPI_Isend/Irecv from thread 0 within each MPI rank,
+    // with MPI_Test/Wait
 
-    //Note in pdf
+    // Note in pdf
 
-    //Every Pthread process its row. {make it its own function?}
-    //Checklist:
+    // Every Pthread process its row. {make it its own function?}
+    // Checklist:
     //-Update universe to use correct row rng stream
     //-Factor in threshold percentages to rng values
     //-Use correct ghost row data ayrank boundaries
     //-Track number alive cells per tick across all threads in a rank group
     //^Use Pthread_mutex_trylock around shared counter variables if needed
-
   }
-  //Simulation finished
+  // Simulation finished
 
-  //MPI_reduce sums of alive cells per tick; will be a vector (array) for all ticks
-
+  // MPI_reduce sums of alive cells per tick; will be a vector (array) for all
+  // ticks
 
   // Stop timer
-  if (mpiRank == 0){
+  if (mpiRank == 0) {
     g_end_cycles = GetTimeBase();
-    g_time_in_secs = ((double) (g_end_cycles - g_start_cycles) / g_processor_frequency);
+    g_time_in_secs =
+        ((double)(g_end_cycles - g_start_cycles) / g_processor_frequency);
   }
 
-  //If needed for this run/experiment:
+  // If needed for this run/experiment:
   // Output using MPI_file_write_at
   // Collect I/O performance from rank 0/thread 0
 
-  //If needed for this run/experiment:
+  // If needed for this run/experiment:
   // Construct heatmap of 32kx32k cell universe
   // Use MPI collective operations of your choice.
-  // Rank 0 will output the heat map to a standard unix file. Expecting small 1-4MB size
-  // Import data for graphing
+  // Rank 0 will output the heat map to a standard unix file. Expecting small
+  // 1-4MB size Import data for graphing
 
-  if (mpiRank == 0){
-    //Print alive tick stats, compute (I/O if needed) performance stats
+  if (mpiRank == 0) {
+    // Print alive tick stats, compute (I/O if needed) performance stats
   }
 
   // END -Perform a barrier and then leave MPI
