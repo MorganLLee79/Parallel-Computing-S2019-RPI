@@ -43,6 +43,10 @@ unsigned long long g_start_cycles = 0;
 unsigned long long g_end_cycles = 0;
 
 // You define these
+double THRESHOLD = 0.0;
+
+// TODO: temporary, probably replace with a function to handle ghost rows
+int board[32768][32768];
 
 // Per-experiment values
 int thread_per_node;
@@ -59,6 +63,10 @@ int ghostRow[] = {0};
 /***************************************************************************/
 
 // You define these
+/**
+ * Updates a single cell at the specified position according to the rules.
+ */
+void update_cell(int row, int col);
 
 /***************************************************************************/
 /* Function: Main **********************************************************/
@@ -150,3 +158,30 @@ int main(int argc, char *argv[]) {
 /***************************************************************************/
 /* Other Functions - You write as part of the assignment********************/
 /***************************************************************************/
+
+void update_cell(int row, int col) {
+  int old_state = board[row][col];
+  int new_state;
+  // determine whether we follow GOL rules or randomize the cell state
+  if (GenVal(row) < THRESHOLD) {
+    new_state = (int)lround(GenVal(row));
+  } else {
+    int neighbors = 0;
+    for (int i = -1; i <= 1; ++i) {
+      for (int j = -1; j <= 1; ++j) {
+        if (i == 0 && j == 0)
+          continue;
+        if (board[row + i][col + j])
+          ++neighbors;
+      }
+    }
+
+    if (neighbors == 2)
+      new_state = ALIVE;
+    else if (neighbors == 3)
+      new_state = old_state;
+    else
+      new_state = DEAD;
+  }
+  board[row][col] = new_state;
+}
