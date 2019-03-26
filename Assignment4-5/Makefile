@@ -1,5 +1,5 @@
 CFLAGS = -Wall -Werror -O3 -Isrc
-LIBS = -pthread
+LIBS = -pthread -lm
 
 EXECUTABLES = assignment4-5
 all: $(EXECUTABLES)
