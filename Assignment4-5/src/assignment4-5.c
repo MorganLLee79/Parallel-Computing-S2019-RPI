@@ -31,6 +31,8 @@
 #define ALIVE 1
 #define DEAD 0
 
+#define ROW_LENGTH 32768 //32,768
+
 /***************************************************************************/
 /* Global Vars *************************************************************/
 /***************************************************************************/
@@ -41,6 +43,15 @@ unsigned long long g_start_cycles = 0;
 unsigned long long g_end_cycles = 0;
 
 // You define these
+
+//Per-experiment values
+int thread_per_node;
+int threshold;
+int number_ticks;
+
+int rows_per_rank; //Use for getting RNG stream indices; [local_row + (rows_per_rank * mpiRank)]
+
+int ghostRow[] = {0};
 
 /***************************************************************************/
 /* Function Decs ***********************************************************/
@@ -54,21 +65,21 @@ unsigned long long g_end_cycles = 0;
 
 int main(int argc, char *argv[]) {
   //    int i = 0;
-  int mpiRank;
-  int mpiSize;
+  int mpi_rank;
+  int mpi_size;
   // Example MPI startup and using CLCG4 RNG
   MPI_Init(&argc, &argv);
-  MPI_Comm_size(MPI_COMM_WORLD, &mpiSize);
-  MPI_Comm_rank(MPI_COMM_WORLD, &mpiRank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
   // Init 32,768 RNG streams - each rank has an independent stream
   InitDefault();
 
-  // Note, used the mpiRank to select which RNG stream to use.
-  // You must replace mpiRank with the right row being used.
+  // Note, used the mpi_rank to select which RNG stream to use.
+  // You must replace mpi_rank with the right row being used.
   // This just show you how to call the RNG.
   printf("Rank %d of %d has been started and a first Random Value of %lf\n",
-         mpiRank, mpiSize, GenVal(mpiRank));
+         mpi_rank, mpi_size, GenVal(mpi_rank));
 
   MPI_Barrier(MPI_COMM_WORLD);
 
@@ -87,7 +98,7 @@ int main(int argc, char *argv[]) {
 
   //Create Pthreads, go into for-loop
   int i;
-  for(i = 0; i < numberTicks; i++){
+  for(i = 0; i < number_ticks; i++){
     //Exchange row data. MPI_Isend/Irecv from thread 0 within each MPI rank, with MPI_Test/Wait
 
     //Note in pdf
