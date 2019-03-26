@@ -1,4 +1,4 @@
-CFLAGS = -Wall -Werror -O3 -I.
+CFLAGS = -Wall -Werror -O3 -Isrc
 LIBS = -pthread
 
 EXECUTABLES = assignment4-5
