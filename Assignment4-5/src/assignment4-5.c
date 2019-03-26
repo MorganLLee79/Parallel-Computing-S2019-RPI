@@ -31,7 +31,7 @@
 #define ALIVE 1
 #define DEAD 0
 
-#define ROW_LENGTH 32768  // 32,768
+#define ROW_LENGTH 32768 // 32,768
 
 /***************************************************************************/
 /* Global Vars *************************************************************/
@@ -40,7 +40,7 @@
 typedef unsigned char cell_t;
 
 double g_time_in_secs = 0;
-double g_processor_frequency = 1600000000.0;  // processing speed for BG/Q
+double g_processor_frequency = 1600000000.0; // processing speed for BG/Q
 unsigned long long g_start_cycles = 0;
 unsigned long long g_end_cycles = 0;
 
@@ -52,13 +52,13 @@ cell_t board[32768][32768];
 
 // Per-experiment values
 int thread_per_node;
-int threshold;
+double threshold;
 int number_ticks;
 
-int rows_per_rank;  // Use for getting RNG stream indices; [local_row +
-                    // (rows_per_rank * mpiRank)]
+int rows_per_rank; // Use for getting RNG stream indices; [local_row +
+                   // (rows_per_rank * mpiRank)]
 
-int ghostRow[] = {0};
+int ghost_row[] = {0};
 
 /***************************************************************************/
 /* Function Decs ***********************************************************/
@@ -97,8 +97,18 @@ int main(int argc, char *argv[]) {
   // Insert your code
 
   // Set up initial variables
+  // Experimental variables
+  if (argc != 4) {
+    pritnf("Error: Expecting thread_per_node, threshold (0.25), and "
+           "number_ticks\n");
+    return -1;
+  }
+  thread_per_node = atoi(argv[1]);
+  threshold = atol(argv[2]);
+  number_ticks = atoi(argv[3]);
 
-  // MPI already set up.
+  // Ghost Rows/MPI variables
+  // ghost_row = calloc? also type
 
   // Start recording time base
   if (mpiRank == 0) {
