@@ -37,6 +37,8 @@
 /* Global Vars *************************************************************/
 /***************************************************************************/
 
+typedef unsigned char cell_t;
+
 double g_time_in_secs = 0;
 double g_processor_frequency = 1600000000.0;  // processing speed for BG/Q
 unsigned long long g_start_cycles = 0;
@@ -46,7 +48,7 @@ unsigned long long g_end_cycles = 0;
 double THRESHOLD = 0.0;
 
 // TODO: temporary, probably replace with a function to handle ghost rows
-int board[32768][32768];
+cell_t board[32768][32768];
 
 // Per-experiment values
 int thread_per_node;
@@ -160,12 +162,14 @@ int main(int argc, char *argv[]) {
 /***************************************************************************/
 
 void update_cell(int row, int col) {
-  int old_state = board[row][col];
-  int new_state;
+  cell_t old_state = board[row][col];
+  cell_t new_state;
   // determine whether we follow GOL rules or randomize the cell state
   if (GenVal(row) < THRESHOLD) {
+    // set state to ALIVE or DEAD with 50-50 chance
     new_state = (int)lround(GenVal(row));
   } else {
+    // count neighbors
     int neighbors = 0;
     for (int i = -1; i <= 1; ++i) {
       for (int j = -1; j <= 1; ++j) {
@@ -176,6 +180,7 @@ void update_cell(int row, int col) {
       }
     }
 
+    // update based on GOL rules
     if (neighbors == 2)
       new_state = ALIVE;
     else if (neighbors == 3)
