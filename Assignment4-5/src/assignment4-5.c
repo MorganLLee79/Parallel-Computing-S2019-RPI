@@ -48,7 +48,8 @@ unsigned long long g_end_cycles = 0;
 cell_t board[ROW_LENGTH][ROW_LENGTH];
 
 // Per-experiment values
-int thread_per_node;
+/// Total number of threads to use for each rank, including the initial thread
+int threads_per_rank;
 double threshold;
 int number_ticks;
 
@@ -96,11 +97,11 @@ int main(int argc, char *argv[]) {
   // Set up initial variables
   // Experimental variables
   if (argc != 4) {
-    printf("Error: Expecting thread_per_node, threshold (0.25), and "
+    printf("Error: Expecting threads_per_rank, threshold (0.25), and "
            "number_ticks\n");
     return -1;
   }
-  thread_per_node = atoi(argv[1]);
+  threads_per_rank = atoi(argv[1]);
   threshold = atol(argv[2]);
   number_ticks = atoi(argv[3]);
 
