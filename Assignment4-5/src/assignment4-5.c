@@ -45,7 +45,7 @@ unsigned long long g_start_cycles = 0;
 unsigned long long g_end_cycles = 0;
 
 // TODO: temporary, probably replace with a function to handle ghost rows
-cell_t **board;
+cell_t *board;
 
 // Per-experiment values
 /// Total number of threads to use for each rank, including the initial thread
@@ -85,6 +85,9 @@ int main(int argc, char *argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
+  // calculate number of rows each rank is responsible for
+  rows_per_rank = ROW_LENGTH / mpi_size;
+
   // Init 32,768 RNG streams - each rank has an independent stream
   InitDefault();
 
@@ -112,6 +115,12 @@ int main(int argc, char *argv[]) {
   // error handling
   if (threads_per_rank <= 0) {
     printf("Error: threads_per_rank must be greater than 0\n");
+    return -1;
+  }
+
+  if (rows_per_rank % threads_per_rank != 0) {
+    printf("Error: threads_per_rank must divide rows_per_rank (%d) evenly\n",
+           rows_per_rank);
     return -1;
   }
 
@@ -308,12 +317,12 @@ cell_t update_cell(int row, int col) {
   }
   // setting a cell doesn't require any indexing tricks, as we shouldn't set
   // any ghost rows, or wrap around either side.
-  board[row][col] = new_state;
+  board[row * ROW_LENGTH + col] = new_state;
   return new_state;
 }
 
 /**
- * Gets the value of a cell, taking into account ghost rows and wrapping at the
+ * Gets the value of a cell, taking ghost rows into account and wrapping at the
  * ends of rows.
  */
 cell_t get_cell(int row, int col) {
@@ -323,15 +332,12 @@ cell_t get_cell(int row, int col) {
   else if (col == ROW_LENGTH)
     col = 0;
 
-  // the row to work with (might be a ghost row)
-  cell_t **line;
+  // use ghost rows if necessary
   if (row == -1) {
-    line = &ghost_row_top;
+    return ghost_row_top[col];
   } else if (row == rows_per_rank) {
-    line = &ghost_row_bot;
+    return ghost_row_bot[col];
   } else {
-    line = &(board[row]);
+    return board[row * ROW_LENGTH + col];
   }
-
-  return (*line)[col];
 }
