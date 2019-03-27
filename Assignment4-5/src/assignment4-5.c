@@ -67,12 +67,11 @@ int *alive_cells;
 /***************************************************************************/
 
 // You define these
-/**
- * Updates a single cell at the specified position according to the rules.
- */
 void update_cell(int row, int col);
 
 void *run_simulation(int *thread_num);
+
+cell_t get_cell(int row, int col);
 
 /***************************************************************************/
 /* Function: Main **********************************************************/
@@ -242,20 +241,23 @@ int main(int argc, char *argv[]) {
 /***************************************************************************/
 
 void *run_simulation(int *thread_num_param) {
-  /*int thread_num = *thread_num_param;*/
+  int thread_num = *thread_num_param;
   free(thread_num_param);
   thread_num_param = NULL;
+
   for (int i = 0; i < number_ticks; i++) {
-    // Exchange row data. MPI_Isend/Irecv from thread 0 within each MPI rank,
-    // with MPI_Test/Wait
+    if (thread_num == 0) {
+      // Exchange row data. MPI_Isend/Irecv from thread 0 within each MPI
+      // rank, with MPI_Test/Wait
+    }
 
     // Note in pdf
 
     // Every Pthread process its row. {make it its own function?}
     // Checklist:
-    //-Update universe to use correct row rng stream
+    //-Update universe using correct row rng stream
     //-Factor in threshold percentages to rng values
-    //-Use correct ghost row data ayrank boundaries
+    //-Use correct ghost row data at rank boundaries
     //-Track number alive cells per tick across all threads in a rank group
     //^Use Pthread_mutex_trylock around shared counter variables if needed
   }
@@ -263,8 +265,11 @@ void *run_simulation(int *thread_num_param) {
   return NULL;
 }
 
+/**
+ * Updates a single cell at the specified position according to the rules.
+ */
 void update_cell(int row, int col) {
-  cell_t old_state = board[row][col];
+  cell_t old_state = get_cell(row, col);
   cell_t new_state;
   // determine whether we follow GOL rules or randomize the cell state
   if (GenVal(row) < threshold) {
@@ -277,7 +282,7 @@ void update_cell(int row, int col) {
       for (int j = -1; j <= 1; ++j) {
         if (i == 0 && j == 0)
           continue;
-        if (board[row + i][col + j])
+        if (get_cell(row + i, col + j) == ALIVE)
           ++neighbors;
       }
     }
@@ -290,5 +295,31 @@ void update_cell(int row, int col) {
     else
       new_state = DEAD;
   }
+  // setting a cell doesn't require any indexing tricks, as we shouldn't set
+  // any ghost rows, or wrap around either side.
   board[row][col] = new_state;
+}
+
+/**
+ * Gets the value of a cell, taking into account ghost rows and wrapping at the
+ * ends of rows.
+ */
+cell_t get_cell(int row, int col) {
+  // adjust column index to wrap around
+  if (col == -1)
+    col = ROW_LENGTH - 1;
+  else if (col == ROW_LENGTH)
+    col = 0;
+
+  // the row to work with (might be a ghost row)
+  cell_t **line;
+  if (row == -1) {
+    line = &ghost_row_top;
+  } else if (row == rows_per_rank) {
+    line = &ghost_row_bot;
+  } else {
+    line = &(board[row]);
+  }
+
+  return (*line)[col];
 }
