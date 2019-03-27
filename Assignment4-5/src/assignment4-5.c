@@ -67,7 +67,7 @@ int *alive_cells;
 /***************************************************************************/
 
 // You define these
-void update_cell(int row, int col);
+cell_t update_cell(int row, int col);
 
 void *run_simulation(int *thread_num);
 
@@ -245,7 +245,8 @@ void *run_simulation(int *thread_num_param) {
   free(thread_num_param);
   thread_num_param = NULL;
 
-  for (int i = 0; i < number_ticks; i++) {
+  const int rows_per_thread = rows_per_rank / threads_per_rank;
+  for (int tick = 0; tick < number_ticks; tick++) {
     if (thread_num == 0) {
       // Exchange row data. MPI_Isend/Irecv from thread 0 within each MPI
       // rank, with MPI_Test/Wait
@@ -254,12 +255,20 @@ void *run_simulation(int *thread_num_param) {
     // Note in pdf
 
     // Every Pthread process its row. {make it its own function?}
-    // Checklist:
-    //-Update universe using correct row rng stream
-    //-Factor in threshold percentages to rng values
-    //-Use correct ghost row data at rank boundaries
-    //-Track number alive cells per tick across all threads in a rank group
-    //^Use Pthread_mutex_trylock around shared counter variables if needed
+    // loop over all of my rows
+    int my_alive_count = 0;
+    for (int row = thread_num * rows_per_thread;
+         row < (thread_num + 1) * rows_per_thread; ++row) {
+      for (int col = 0; col < ROW_LENGTH; ++col) {
+        // Checklist:
+        //-Update universe using correct row rng stream
+        //-Factor in threshold percentages to rng values
+        //-Use correct ghost row data at rank boundaries
+        //-Track number alive cells per tick across all threads in a rank group
+        my_alive_count += update_cell(row, col);
+      }
+      //^Use Pthread_mutex_trylock around shared counter variables if needed
+    }
   }
 
   return NULL;
@@ -267,8 +276,10 @@ void *run_simulation(int *thread_num_param) {
 
 /**
  * Updates a single cell at the specified position according to the rules.
+ *
+ * Returns the new cell state.
  */
-void update_cell(int row, int col) {
+cell_t update_cell(int row, int col) {
   cell_t old_state = get_cell(row, col);
   cell_t new_state;
   // determine whether we follow GOL rules or randomize the cell state
@@ -298,6 +309,7 @@ void update_cell(int row, int col) {
   // setting a cell doesn't require any indexing tricks, as we shouldn't set
   // any ghost rows, or wrap around either side.
   board[row][col] = new_state;
+  return new_state;
 }
 
 /**
