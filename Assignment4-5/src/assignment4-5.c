@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
 
   // Set up initial variables
   // Experimental variables
-  if (argc > 4) {
+  if (argc < 4) {
     printf("Error: Expecting threads_per_rank, threshold (0.25), number_ticks, "
            "output file path (if applicable)\n");
     return -1;
