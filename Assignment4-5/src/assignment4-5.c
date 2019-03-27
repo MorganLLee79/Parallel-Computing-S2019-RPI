@@ -128,17 +128,17 @@ int main(int argc, char *argv[]) {
   // Allocate universe chunks and "ghost" rows
 
   // Initialize universe, all cells alive
-  board = calloc(ROW_LENGTH, ROW_LENGTH / mpi_size);
+  board = calloc(ROW_LENGTH * ROW_LENGTH / mpi_size, sizeof *board);
   memset(board, ALIVE, ROW_LENGTH * ROW_LENGTH / mpi_size);
 
   // Initialize/allocate ghost rows
-  ghost_row_top = calloc(sizeof(cell_t), ROW_LENGTH);
+  ghost_row_top = calloc(ROW_LENGTH, sizeof *ghost_row_top);
   memset(ghost_row_top, ALIVE, ROW_LENGTH);
-  ghost_row_bot = calloc(sizeof(cell_t), ROW_LENGTH);
+  ghost_row_bot = calloc(ROW_LENGTH, sizeof *ghost_row_bot);
   memset(ghost_row_bot, ALIVE, ROW_LENGTH);
 
   // Initialize/allocate alive_cells
-  alive_cells = calloc(sizeof(int), number_ticks);
+  alive_cells = calloc(number_ticks, sizeof *alive_cells);
   memset(alive_cells, 0, number_ticks);
 
   // Create Pthreads, go into for-loop
@@ -147,14 +147,14 @@ int main(int argc, char *argv[]) {
   pthread_t *threads = calloc(threads_per_rank - 1, sizeof *threads);
   // create n-1 more threads
   for (int i = 0; i < threads_per_rank - 1; ++i) {
-    thread_num = malloc(sizeof(int));
+    thread_num = malloc(sizeof *thread_num);
     *thread_num = i + 1;
     pthread_create(&threads[i], NULL, (void *(*)(void *))run_simulation,
                    (void *)thread_num);
   }
 
   // we are thread 0, so we need to run the simulation as well
-  thread_num = malloc(sizeof(int));
+  thread_num = malloc(sizeof *thread_num);
   *thread_num = 0;
   run_simulation(thread_num);
 
