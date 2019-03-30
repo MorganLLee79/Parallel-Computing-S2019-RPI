@@ -202,6 +202,12 @@ int main(int argc, char *argv[]) {
 
   // MPI_reduce sums of alive cells per tick; will be a vector (array) for all
   // ticks
+  int *alive_cells_out = NULL;
+  if (mpi_rank == 0) {
+    alive_cells_out = calloc(number_ticks, sizeof *alive_cells_out);
+  }
+  MPI_Reduce(alive_cells, alive_cells_out, number_ticks, MPI_INT, MPI_SUM, 0,
+             MPI_COMM_WORLD);
 
   // Stop timer
   if (mpi_rank == 0) {
@@ -260,10 +266,18 @@ int main(int argc, char *argv[]) {
     printf("Alive ticks:\n");
     int i;
     for (i = 0; i < number_ticks; i++) {
-      printf("%d\n", alive_cells[i]);
+      printf("%d\n", alive_cells_out[i]);
     }
     printf("\nTotal run time: %lf\n", g_time_in_secs);
+
+    free(alive_cells_out);
   }
+
+  // clean up
+  free(alive_cells);
+  free(ghost_row_bot);
+  free(ghost_row_top);
+  free(board);
 
   // END -Perform a barrier and then leave MPI
   MPI_Barrier(MPI_COMM_WORLD);
