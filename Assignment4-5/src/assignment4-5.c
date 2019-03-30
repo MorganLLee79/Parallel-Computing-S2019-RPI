@@ -77,6 +77,10 @@ cell_t *ghost_row_bot;
 // Track the number of alive cells per tick
 int *alive_cells;
 
+// pthreads synchronization variables
+pthread_mutex_t alive_cells_mtx;
+pthread_barrier_t thread_barrier;
+
 /***************************************************************************/
 /* Function Decs ***********************************************************/
 /***************************************************************************/
@@ -163,6 +167,11 @@ int main(int argc, char *argv[]) {
   alive_cells = calloc(number_ticks, sizeof *alive_cells);
   memset(alive_cells, 0, number_ticks);
 
+  // Initialize Pthread syncronization stuff
+  pthread_mutex_init(&alive_cells_mtx, NULL);
+  // all threads must call pthread_barrier_wait
+  pthread_barrier_init(&thread_barrier, NULL, threads_per_rank);
+
   // Create Pthreads, go into for-loop
   int *thread_num;
   // allocate array to hold thread handles
@@ -186,6 +195,10 @@ int main(int argc, char *argv[]) {
     pthread_join(threads[i], NULL);
   }
   free(threads);
+
+  // Clean up pthreads
+  pthread_mutex_destroy(&alive_cells_mtx);
+  pthread_barrier_destroy(&thread_barrier);
 
   // MPI_reduce sums of alive cells per tick; will be a vector (array) for all
   // ticks
@@ -269,10 +282,14 @@ void *run_simulation(int *thread_num_param) {
 
   const int rows_per_thread = rows_per_rank / threads_per_rank;
   for (int tick = 0; tick < number_ticks; tick++) {
+    // wait for all threads to arrive before sending data around
+    pthread_barrier_wait(&thread_barrier);
     if (thread_num == 0) {
       // Exchange row data. MPI_Isend/Irecv from thread 0 within each MPI
       // rank, with MPI_Test/Wait
     }
+    // all threads must wait for ghost row data to be received before running
+    pthread_barrier_wait(&thread_barrier);
 
     // Note in pdf
 
@@ -289,8 +306,12 @@ void *run_simulation(int *thread_num_param) {
         //-Track number alive cells per tick across all threads in a rank group
         my_alive_count += update_cell(row, col);
       }
-      //^Use Pthread_mutex_trylock around shared counter variables if needed
     }
+
+    //^Use Pthread_mutex_trylock around shared counter variables if needed
+    pthread_mutex_lock(&alive_cells_mtx);
+    alive_cells[tick] += my_alive_count;
+    pthread_mutex_unlock(&alive_cells_mtx);
   }
 
   return NULL;
