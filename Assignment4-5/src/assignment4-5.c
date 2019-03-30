@@ -56,6 +56,9 @@ double g_processor_frequency = 1.0; // processing speed for other machines
 timebase_t g_start_cycles = 0;
 timebase_t g_end_cycles = 0;
 
+// These can be global, since they're shared between all threads.
+int mpi_rank, mpi_size;
+
 // TODO: temporary, probably replace with a function to handle ghost rows
 cell_t *board;
 
@@ -90,8 +93,6 @@ cell_t get_cell(int row, int col);
 /***************************************************************************/
 
 int main(int argc, char *argv[]) {
-  int mpi_rank;
-  int mpi_size;
   // Example MPI startup and using CLCG4 RNG
   MPI_Init(&argc, &argv);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
@@ -149,8 +150,8 @@ int main(int argc, char *argv[]) {
   // Allocate universe chunks and "ghost" rows
 
   // Initialize universe, all cells alive
-  board = calloc(ROW_LENGTH * ROW_LENGTH / mpi_size, sizeof *board);
-  memset(board, ALIVE, ROW_LENGTH * ROW_LENGTH / mpi_size);
+  board = calloc(ROW_LENGTH * rows_per_rank, sizeof *board);
+  memset(board, ALIVE, ROW_LENGTH * rows_per_rank);
 
   // Initialize/allocate ghost rows
   ghost_row_top = calloc(ROW_LENGTH, sizeof *ghost_row_top);
@@ -215,8 +216,8 @@ int main(int argc, char *argv[]) {
       (MPI_File fh, MPI_Offset offset, const void *buf,
       int count, MPI_Datatype datatype, MPI_Status *status)*/
     // Each mpi rank will write at it's spot in the file
-    int offset = mpi_rank * ROW_LENGTH * ROW_LENGTH / mpi_size;
-    int count = ROW_LENGTH * ROW_LENGTH / mpi_size;
+    int offset = mpi_rank * ROW_LENGTH * rows_per_rank;
+    int count = ROW_LENGTH * rows_per_rank;
     MPI_Status io_status;
     MPI_File_write_at(io_output_file, offset, board, count, MPI_INT,
                       &io_status);
@@ -304,9 +305,9 @@ cell_t update_cell(int row, int col) {
   cell_t old_state = get_cell(row, col);
   cell_t new_state;
   // determine whether we follow GOL rules or randomize the cell state
-  if (GenVal(row) < threshold) {
+  if (GenVal(row + rows_per_rank * mpi_rank) < threshold) {
     // set state to ALIVE or DEAD with 50-50 chance
-    new_state = (int)lround(GenVal(row));
+    new_state = GenVal(row + rows_per_rank * mpi_rank) < 0.5 ? DEAD : ALIVE;
   } else {
     // count neighbors
     int neighbors = 0;
