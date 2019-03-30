@@ -31,7 +31,10 @@
 #define ALIVE 1
 #define DEAD 0
 
+// allow this to be defined at compile-time, for local debugging
+#ifndef ROW_LENGTH
 #define ROW_LENGTH 32768 // 32,768
+#endif
 
 /***************************************************************************/
 /* Global Vars *************************************************************/
@@ -40,9 +43,18 @@
 typedef unsigned char cell_t;
 
 double g_time_in_secs = 0;
+// on the BG/Q, GetTimeBase returns a cycle number, but MPI_Wtime returns a
+// fractional timestamp in seconds. Store the timestamp as a double on other
+// machines, so we get higher resolution than 1 second.
+#ifdef __bgq__
+typedef unsigned long long timebase_t;
 double g_processor_frequency = 1600000000.0; // processing speed for BG/Q
-unsigned long long g_start_cycles = 0;
-unsigned long long g_end_cycles = 0;
+#else
+typedef double timebase_t;
+double g_processor_frequency = 1.0; // processing speed for other machines
+#endif
+timebase_t g_start_cycles = 0;
+timebase_t g_end_cycles = 0;
 
 // TODO: temporary, probably replace with a function to handle ghost rows
 cell_t *board;
@@ -189,7 +201,7 @@ int main(int argc, char *argv[]) {
     // Output using MPI_file_write_at
 
     // Start timer for i/o
-    unsigned long long io_start_time = GetTimeBase();
+    timebase_t io_start_time = GetTimeBase();
 
     // Open relevant file
     MPI_File io_output_file;
@@ -212,7 +224,7 @@ int main(int argc, char *argv[]) {
     MPI_File_close(&io_output_file);
 
     // Stop timer for i/o
-    unsigned long long io_end_time = GetTimeBase();
+    timebase_t io_end_time = GetTimeBase();
 
     double io_time_in_secs =
         ((double)(io_end_time - io_start_time) / g_processor_frequency);
