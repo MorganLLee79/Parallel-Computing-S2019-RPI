@@ -36,6 +36,9 @@
 #define ROW_LENGTH 32768 // 32,768
 #endif
 
+#define UP_TAG 1
+#define DOWN_TAG 2
+
 /***************************************************************************/
 /* Global Vars *************************************************************/
 /***************************************************************************/
@@ -158,8 +161,10 @@ int main(int argc, char *argv[]) {
   memset(board, ALIVE, ROW_LENGTH * rows_per_rank);
 
   // Initialize/allocate ghost rows
+  // above first row
   ghost_row_top = calloc(ROW_LENGTH, sizeof *ghost_row_top);
   memset(ghost_row_top, ALIVE, ROW_LENGTH);
+  // below last row
   ghost_row_bot = calloc(ROW_LENGTH, sizeof *ghost_row_bot);
   memset(ghost_row_bot, ALIVE, ROW_LENGTH);
 
@@ -301,6 +306,30 @@ void *run_simulation(int *thread_num_param) {
     if (thread_num == 0) {
       // Exchange row data. MPI_Isend/Irecv from thread 0 within each MPI
       // rank, with MPI_Test/Wait
+      MPI_Request requests[4];
+      MPI_Status statuses[4];
+      // have to add extra mpi_size so we don't get negative numbers, since
+      // in C, (-1) % 10 = -1, not 9
+      int rank_above = (mpi_rank + mpi_size - 1) % mpi_size; // rank - 1
+      int rank_below = (mpi_rank + 1) % mpi_size;            // rank + 1
+
+      // receive row from rank above into ghost_row_top
+      MPI_Irecv(ghost_row_top, ROW_LENGTH, MPI_UNSIGNED_CHAR, rank_above,
+                DOWN_TAG, MPI_COMM_WORLD, &requests[0]);
+      // receive row from rank below into ghost_row_bot
+      MPI_Irecv(ghost_row_bot, ROW_LENGTH, MPI_UNSIGNED_CHAR, rank_below,
+                UP_TAG, MPI_COMM_WORLD, &requests[1]);
+      // send top row (0) to rank above
+      MPI_Isend(board + 0 * ROW_LENGTH, ROW_LENGTH, MPI_UNSIGNED_CHAR,
+                rank_above, UP_TAG, MPI_COMM_WORLD, &requests[2]);
+      // send bottom row (rows_per_rank - 1) to rank below
+      MPI_Isend(board + (rows_per_rank - 1) * ROW_LENGTH, ROW_LENGTH,
+                MPI_UNSIGNED_CHAR, rank_below, DOWN_TAG, MPI_COMM_WORLD,
+                &requests[3]);
+
+      // must wait for all operations to complete, to ensure that the received
+      // ghost rows are correct and that we do not modify our rows while sending
+      MPI_Waitall(4, requests, statuses);
     }
     // all threads must wait for ghost row data to be received before running
     pthread_barrier_wait(&thread_barrier);
