@@ -23,7 +23,10 @@
 //#ifdef onBGQ
 //#include<hwi/include/bqc/A2_inlines.h>
 //#else
+<<<<<<< Updated upstream
 >>>>>>> Old assignment 3 stuff? Ignore this Eric
+=======
+>>>>>>> Stashed changes
 #define GetTimeBase MPI_Wtime
 //#endif
 
@@ -37,11 +40,14 @@ unsigned long long end_cycles = 0;
   1048576 // 1073741824 // 1,073,741,824; 2^30; final answer =
           // 576,460,751,766,552,576
 
+<<<<<<< Updated upstream
 <<<<<<< HEAD
 // Values will be deterministic;
 // Example: bigarray[0] = 0 while bigarray[999999999%elementsperrank] =
 // 999999999.
 =======
+=======
+>>>>>>> Stashed changes
 #define input_size 1073741824 // 1,073,741,824; 2^30; final answer = 576,460,751,766,552,576
 
 //Values will be deterministic;
