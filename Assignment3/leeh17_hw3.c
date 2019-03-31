@@ -6,6 +6,7 @@
 // Assignment 3
 // Expected output: 576,460,751,766,552,576; N*N- 1/2
 
+<<<<<<< HEAD
 // Timer stuff
 // Define depending on if on mastiff or BG/Q
 #define onBGQ 0
@@ -13,8 +14,18 @@
 #ifdef onBGQ
 #include <hwi/include/bqc/A2_inlines.h>
 #else
+=======
+
+//Timer stuff
+//Define depending on if on mastiff or BG/Q
+//#define onBGQ 0
+
+//#ifdef onBGQ
+//#include<hwi/include/bqc/A2_inlines.h>
+//#else
+>>>>>>> Old assignment 3 stuff? Ignore this Eric
 #define GetTimeBase MPI_Wtime
-#endif
+//#endif
 
 // Timer vars
 double timeSeconds = 0;
@@ -26,9 +37,16 @@ unsigned long long end_cycles = 0;
   1048576 // 1073741824 // 1,073,741,824; 2^30; final answer =
           // 576,460,751,766,552,576
 
+<<<<<<< HEAD
 // Values will be deterministic;
 // Example: bigarray[0] = 0 while bigarray[999999999%elementsperrank] =
 // 999999999.
+=======
+#define input_size 1073741824 // 1,073,741,824; 2^30; final answer = 576,460,751,766,552,576
+
+//Values will be deterministic;
+//Example: bigarray[0] = 0 while bigarray[999999999%elementsperrank] = 999999999.
+>>>>>>> Old assignment 3 stuff? Ignore this Eric
 long long *inputData;
 
 // Track my mpi rank and total mpi size
