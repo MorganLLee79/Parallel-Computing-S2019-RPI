@@ -70,6 +70,7 @@ cell_t *board;
 int threads_per_rank;
 double threshold;
 int number_ticks;
+int do_heatmap;
 
 int rows_per_rank; // Use for getting RNG stream indices; [local_row +
                    // (rows_per_rank * mpi_rank)]
@@ -131,6 +132,8 @@ int main(int argc, char *argv[]) {
   threads_per_rank = atoi(argv[1]);
   threshold = atof(argv[2]);
   number_ticks = atoi(argv[3]);
+  // TODO: make this a command line parameter, somehow
+  do_heatmap = 0;
 
   // error handling
   if (threads_per_rank <= 0) {
@@ -265,6 +268,46 @@ int main(int argc, char *argv[]) {
   // Use MPI collective operations of your choice.
   // Rank 0 will output the heat map to a standard unix file. Expecting small
   // 1-4MB size Import data for graphing
+
+  if (do_heatmap) {
+    // Here, we have each rank allocate a local 1Kx1K heatmap, then fill in the
+    // rows with the data they have, with zeros everywhere else. Then we reduce
+    // this over all the ranks, leaving us with a full heatmap on rank 0.
+    // This avoids the issues of having to do a multilevel reduce when there are
+    // more ranks than rows in the heatmap, and generally simplifies the code.
+
+    int heatmap_area = ROW_LENGTH / 32 * ROW_LENGTH / 32;
+    // need to hold values from 0-1024, so a char is too small
+    short *heatmap = calloc(heatmap_area, sizeof(short));
+
+    // sum over all values
+    int board_offset = rows_per_rank * mpi_rank;
+    for (int r = 0; r < ROW_LENGTH / mpi_size; r++) {
+      int heatmap_r = (board_offset + r) * (ROW_LENGTH / 32);
+      for (int c = 0; c < ROW_LENGTH; c++) {
+        int heatmap_c = c / 32;
+        heatmap[heatmap_r + heatmap_c] += board[r * ROW_LENGTH + c];
+      }
+    }
+
+    if (mpi_rank == 0) {
+      // get reduction results
+      short *heatmap_out = calloc(heatmap_area, sizeof(short));
+      MPI_Reduce(heatmap, heatmap_out, heatmap_area, MPI_SHORT, MPI_SUM, 0,
+                 MPI_COMM_WORLD);
+      free(heatmap);
+
+      // write to file
+      FILE *f = fopen("heatmap.bin", "wb");
+      fwrite(heatmap_out, sizeof *heatmap_out, heatmap_area, f);
+      fclose(f);
+      free(heatmap_out);
+    } else {
+      MPI_Reduce(heatmap, NULL, heatmap_area, MPI_SHORT, MPI_SUM, 0,
+                 MPI_COMM_WORLD);
+      free(heatmap);
+    }
+  }
 
   if (mpi_rank == 0) {
     // Print alive tick stats, compute (I/O if needed) performance stats
