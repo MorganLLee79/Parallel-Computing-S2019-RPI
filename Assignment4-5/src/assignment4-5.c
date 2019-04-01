@@ -112,13 +112,6 @@ int main(int argc, char *argv[]) {
   // Init 32,768 RNG streams - each rank has an independent stream
   InitDefault();
 
-  // Note, used the mpi_rank to select which RNG stream to use.
-  // You must replace mpi_rank with the right row being used.
-  // This just show you how to call the RNG.
-
-  printf("Rank %d of %d has been started and a first Random Value of %lf\n",
-         mpi_rank, mpi_size, GenVal(mpi_rank));
-
   MPI_Barrier(MPI_COMM_WORLD);
 
   // Insert your code
@@ -285,12 +278,13 @@ int main(int argc, char *argv[]) {
     short *heatmap = calloc(heatmap_area, sizeof(short));
 
     // sum over all values
-    int board_offset = rows_per_rank * mpi_rank;
+    int global_offset = rows_per_rank * mpi_rank;
     for (int r = 0; r < ROW_LENGTH / mpi_size; r++) {
-      int heatmap_r = (board_offset + r) * (ROW_LENGTH / 32);
+      int heatmap_r = (global_offset + r) / 32;
       for (int c = 0; c < ROW_LENGTH; c++) {
         int heatmap_c = c / 32;
-        heatmap[heatmap_r + heatmap_c] += board[r * ROW_LENGTH + c];
+        heatmap[heatmap_r * ROW_LENGTH / 32 + heatmap_c] +=
+            board[r * ROW_LENGTH + c];
       }
     }
 
