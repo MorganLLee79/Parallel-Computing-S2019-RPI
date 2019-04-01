@@ -70,7 +70,6 @@ cell_t *board;
 int threads_per_rank;
 double threshold;
 int number_ticks;
-int do_heatmap;
 
 int rows_per_rank; // Use for getting RNG stream indices; [local_row +
                    // (rows_per_rank * mpi_rank)]
@@ -120,14 +119,31 @@ int main(int argc, char *argv[]) {
   // Experimental variables
   if (argc < 4) {
     printf("Error: Expecting threads_per_rank, threshold (0.25), number_ticks, "
-           "output file path (if applicable)\n");
+           "[output file path], [--heatmap <heatmap file>]\n");
     return -1;
   }
   threads_per_rank = atoi(argv[1]);
   threshold = atof(argv[2]);
   number_ticks = atoi(argv[3]);
-  // TODO: make this a command line parameter, somehow
-  do_heatmap = 0;
+
+  char *board_file = NULL;
+  char *heatmap_file = NULL;
+  if (argc == 4) {
+    board_file = argv[4];
+  } else if (argc == 5) {
+    if (!strcmp(argv[4], "--heatmap")) {
+      printf("Error: got 5 arguments, expecting 4th to be \"--heatmap\"\n");
+      return -1;
+    }
+    heatmap_file = argv[5];
+  } else if (argc == 6) {
+    if (!strcmp(argv[5], "--heatmap")) {
+      printf("Error: got 6 arguments, expecting 5th to be \"--heatmap\"\n");
+      return -1;
+    }
+    board_file = argv[4];
+    heatmap_file = argv[6];
+  }
 
   // error handling
   if (threads_per_rank <= 0) {
@@ -219,7 +235,7 @@ int main(int argc, char *argv[]) {
   }
 
   // If needed for this run/experiment:
-  if (argc >= 5) { // TODO temporarily set at compile time
+  if (board_file != NULL) {
     // Output using MPI_file_write_at
 
     // Start timer for i/o
@@ -227,11 +243,11 @@ int main(int argc, char *argv[]) {
 
     // Open relevant file
     MPI_File io_output_file;
-    int file_made =
-        MPI_File_open(MPI_COMM_WORLD, argv[4], MPI_MODE_CREATE | MPI_MODE_RDWR,
-                      MPI_INFO_NULL, &io_output_file);
+    int file_made = MPI_File_open(MPI_COMM_WORLD, board_file,
+                                  MPI_MODE_CREATE | MPI_MODE_RDWR,
+                                  MPI_INFO_NULL, &io_output_file);
     if (file_made != MPI_SUCCESS) {
-      printf("ERROR: Unable to create io output file %s.\n", argv[4]);
+      printf("ERROR: Unable to create io output file %s.\n", board_file);
     }
 
     /*int MPI_File_write_at
@@ -266,7 +282,7 @@ int main(int argc, char *argv[]) {
   // Rank 0 will output the heat map to a standard unix file. Expecting small
   // 1-4MB size Import data for graphing
 
-  if (do_heatmap) {
+  if (heatmap_file != NULL) {
     // Here, we have each rank allocate a local 1Kx1K heatmap, then fill in the
     // rows with the data they have, with zeros everywhere else. Then we reduce
     // this over all the ranks, leaving us with a full heatmap on rank 0.
@@ -296,7 +312,7 @@ int main(int argc, char *argv[]) {
       free(heatmap);
 
       // write to file
-      FILE *f = fopen("heatmap.bin", "wb");
+      FILE *f = fopen(heatmap_file, "wb");
       fwrite(heatmap_out, sizeof *heatmap_out, heatmap_area, f);
       fclose(f);
       free(heatmap_out);
