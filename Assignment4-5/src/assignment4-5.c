@@ -115,6 +115,7 @@ int main(int argc, char *argv[]) {
   // Note, used the mpi_rank to select which RNG stream to use.
   // You must replace mpi_rank with the right row being used.
   // This just show you how to call the RNG.
+
   printf("Rank %d of %d has been started and a first Random Value of %lf\n",
          mpi_rank, mpi_size, GenVal(mpi_rank));
 
@@ -225,7 +226,7 @@ int main(int argc, char *argv[]) {
   }
 
   // If needed for this run/experiment:
-  if (argc > 5) { // TODO temporarily set at compile time
+  if (argc >= 5) { // TODO temporarily set at compile time
     // Output using MPI_file_write_at
 
     // Start timer for i/o
@@ -233,9 +234,10 @@ int main(int argc, char *argv[]) {
 
     // Open relevant file
     MPI_File io_output_file;
-    int file_status = MPI_File_open(MPI_COMM_WORLD, argv[4], MPI_MODE_CREATE,
-                                    MPI_INFO_NULL, &io_output_file);
-    if (file_status) {
+    int file_made =
+        MPI_File_open(MPI_COMM_WORLD, argv[4], MPI_MODE_CREATE | MPI_MODE_RDWR,
+                      MPI_INFO_NULL, &io_output_file);
+    if (file_made != MPI_SUCCESS) {
       printf("ERROR: Unable to create io output file %s.\n", argv[4]);
     }
 
@@ -243,13 +245,15 @@ int main(int argc, char *argv[]) {
       (MPI_File fh, MPI_Offset offset, const void *buf,
       int count, MPI_Datatype datatype, MPI_Status *status)*/
     // Each mpi rank will write at it's spot in the file
-    int offset = mpi_rank * ROW_LENGTH * rows_per_rank;
     int count = ROW_LENGTH * rows_per_rank;
+    int offset = mpi_rank * count;
     MPI_Status io_status;
     MPI_File_write_at(io_output_file, offset, board, count, MPI_INT,
                       &io_status);
 
-    MPI_File_close(&io_output_file);
+    if (file_made != MPI_SUCCESS) {
+      MPI_File_close(&io_output_file);
+    }
 
     // Stop timer for i/o
     timebase_t io_end_time = GetTimeBase();
