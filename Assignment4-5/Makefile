@@ -1,6 +1,6 @@
 LOCAL_CFLAGS += -Wall -O5 -Isrc
 DEBUG_CFLAGS = $(LOCAL_CFLAGS) -g -Og -DDEBUG_MODE
-LIBS = -pthread
+LIBS = -lpthread
 
 MPICC ?= mpicc
 
