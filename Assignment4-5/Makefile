@@ -8,10 +8,10 @@ EXECUTABLES = assignment4-5 assignment4-5-debug
 all: $(EXECUTABLES)
 
 assignment4-5: src/assignment4-5.c clcg4.o
-	$(MPICC) $(LOCAL_CFLAGS) $(CFLAGS) $^ $(LIBS) -o $@
+	$(MPICC) $(LOCAL_CFLAGS) $(CFLAGS) $^ -o $@
 
 assignment4-5-debug: src/assignment4-5.c clcg4.o
-	$(MPICC) $(DEBUG_CFLAGS) $(CFLAGS) $^ $(LIBS) -o $@
+	$(MPICC) $(DEBUG_CFLAGS) $(CFLAGS) $^ -o $@
 
 clcg4.o: src/clcg4.c src/clcg4.h
 	$(CC) $(LOCAL_CFLAGS) $(CFLAGS) -c $< -o $@
