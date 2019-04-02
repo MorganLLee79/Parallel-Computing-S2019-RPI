@@ -128,16 +128,16 @@ int main(int argc, char *argv[]) {
 
   char *board_file = NULL;
   char *heatmap_file = NULL;
-  if (argc == 4) {
+  if (argc == 5) {
     board_file = argv[4];
-  } else if (argc == 5) {
-    if (!strcmp(argv[4], "--heatmap")) {
+  } else if (argc == 6) {
+    if (strcmp(argv[4], "--heatmap")) {
       printf("Error: got 5 arguments, expecting 4th to be \"--heatmap\"\n");
       return -1;
     }
     heatmap_file = argv[5];
-  } else if (argc == 6) {
-    if (!strcmp(argv[5], "--heatmap")) {
+  } else if (argc == 7) {
+    if (strcmp(argv[5], "--heatmap")) {
       printf("Error: got 6 arguments, expecting 5th to be \"--heatmap\"\n");
       return -1;
     }
@@ -312,7 +312,11 @@ int main(int argc, char *argv[]) {
       free(heatmap);
 
       // write to file
-      FILE *f = fopen(heatmap_file, "wb");
+      FILE *f = fopen(heatmap_file, "w");
+      if (f == NULL) {
+        perror("Error opening heatmap for writing");
+        exit(EXIT_FAILURE);
+      }
       fwrite(heatmap_out, sizeof *heatmap_out, heatmap_area, f);
       fclose(f);
       free(heatmap_out);
