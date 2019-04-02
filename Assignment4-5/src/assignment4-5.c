@@ -248,6 +248,7 @@ int main(int argc, char *argv[]) {
                                   MPI_INFO_NULL, &io_output_file);
     if (file_made != MPI_SUCCESS) {
       printf("ERROR: Unable to create io output file %s.\n", board_file);
+      return -1;
     }
 
     /*int MPI_File_write_at
@@ -260,7 +261,7 @@ int main(int argc, char *argv[]) {
     MPI_File_write_at(io_output_file, offset, board, count, MPI_INT,
                       &io_status);
 
-    if (file_made != MPI_SUCCESS) {
+    if (file_made == MPI_SUCCESS) {
       MPI_File_close(&io_output_file);
     }
 
