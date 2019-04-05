@@ -59,7 +59,7 @@ plt.ylabel("Time (s)")
 
 if EXPORT:
     tikz_save(
-        "io_comparison.tex",
+        "latex/io_comparison.tex",
         figureheight=r"\figureheight",
         figurewidth=r"\figurewidth",
         extra_axis_parameters=extra_params,

@@ -63,7 +63,7 @@ plt.legend()
 
 if EXPORT:
     tikz_save(
-        "runtime_comparison.tex",
+        "latex/runtime_comparison.tex",
         figureheight=r"\figureheight",
         figurewidth=r"\figurewidth",
         extra_axis_parameters=extra_params,

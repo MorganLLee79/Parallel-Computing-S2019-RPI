@@ -1,0 +1,33 @@
+% This file was created by matplotlib2tikz v0.7.3.
+\begin{tikzpicture}
+
+\definecolor{color0}{rgb}{0.12156862745098,0.466666666666667,0.705882352941177}
+
+\begin{axis}[
+height=\figureheight,
+log basis x={2},
+tick align=outside,
+tick pos=left,
+width=\figurewidth,
+x grid style={white!69.01960784313725!black},
+xlabel={MPI ranks},
+xmin=103.968306733598, xmax=10085.5350341216,
+xmode=log,
+xtick style={color=black},
+xticklabel={\xinttheiexpr[0]2^\tick\relax},
+y grid style={white!69.01960784313725!black},
+ylabel={Time (s)},
+ymin=-1.2974254, ymax=31.1756614,
+ytick style={color=black}
+]
+\addplot [semithick, color0, mark=*, mark size=2, mark options={solid}]
+table {%
+8192 29.699612
+2048 5.721768
+512 6.806001
+256 0.178624
+128 0.332716
+};
+\end{axis}
+
+\end{tikzpicture}

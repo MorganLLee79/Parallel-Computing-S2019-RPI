@@ -1,0 +1,78 @@
+% This file was created by matplotlib2tikz v0.7.3.
+\begin{tikzpicture}
+
+\definecolor{color0}{rgb}{0.12156862745098,0.466666666666667,0.705882352941177}
+\definecolor{color1}{rgb}{1,0.498039215686275,0.0549019607843137}
+\definecolor{color2}{rgb}{0.172549019607843,0.627450980392157,0.172549019607843}
+\definecolor{color3}{rgb}{0.83921568627451,0.152941176470588,0.156862745098039}
+\definecolor{color4}{rgb}{0.580392156862745,0.403921568627451,0.741176470588235}
+
+\begin{axis}[
+every y tick label/.style = {
+rotate=0.0
+},
+height=\figureheight,
+legend cell align={left},
+legend style={draw=white!80.0!black},
+log basis x={2},
+log basis y={10},
+log ticks with fixed point,
+tick align=outside,
+width=\figurewidth,
+x grid style={white!69.01960784313725!black},
+xlabel={Total execution units (ranks + threads)},
+xmin=215.269482304951, xmax=9741.98468610229,
+xmode=log,
+xtick pos=left,
+xtick style={color=black},
+xticklabel={\xinttheiexpr[0]2^\tick\relax},
+y grid style={white!69.01960784313725!black},
+ylabel={Time (s)},
+ymin=25.6229808875648, ymax=1231.62057687985,
+ymode=log,
+ytick pos=both,
+ytick style={color=black}
+]
+\addplot [semithick, color0, mark=*, mark size=2, mark options={solid}]
+table {%
+8192 33.58101
+4096 66.852355
+1024 267.678399
+256 1032.831161
+};
+\addlegendentry{64 threads per rank}
+\addplot [semithick, color1, mark=*, mark size=2, mark options={solid}]
+table {%
+8192 33.567934
+4096 65.748863
+1024 267.762241
+256 1032.791601
+};
+\addlegendentry{32 threads per rank}
+\addplot [semithick, color2, mark=*, mark size=2, mark options={solid}]
+table {%
+8192 34.79345
+4096 65.524512
+1024 251.86032
+256 1032.547306
+};
+\addlegendentry{16 threads per rank}
+\addplot [semithick, color3, mark=*, mark size=2, mark options={solid}]
+table {%
+8192 30.554646
+4096 61.728044
+1024 239.114811
+256 968.240309
+};
+\addlegendentry{4 threads per rank}
+\addplot [semithick, color4, mark=*, mark size=2, mark options={solid}]
+table {%
+8192 37.42741
+4096 74.320769
+1024 265.778503
+256 1002.823942
+};
+\addlegendentry{1 thread per rank}
+\end{axis}
+
+\end{tikzpicture}
