@@ -8,70 +8,63 @@
 \definecolor{color4}{rgb}{0.580392156862745,0.403921568627451,0.741176470588235}
 
 \begin{axis}[
-every y tick label/.style = {
-rotate=0.0
-},
 height=\figureheight,
 legend cell align={left},
-legend style={draw=white!80.0!black},
+legend style={at={(0.03,0.03)}, anchor=south west, draw=white!80.0!black},
 log basis x={2},
-log basis y={10},
-log ticks with fixed point,
 tick align=outside,
+tick pos=left,
 width=\figurewidth,
 x grid style={white!69.01960784313725!black},
-xlabel={Total parallel units (MPI ranks and threads)},
-xmin=215.269482304951, xmax=9741.98468610229,
+xlabel={Compute nodes used},
+xmin=3.36358566101486, xmax=152.218510720348,
 xmode=log,
-xtick pos=left,
 xtick style={color=black},
-xtick={8192, 4096, 256, 1024},
+xtick={128, 64, 4, 16},
 xticklabel={\xinttheiexpr[0]2^\tick\relax},
 y grid style={white!69.01960784313725!black},
-ylabel={Execution time (seconds)},
-ymin=25.6229808875648, ymax=1231.62057687985,
-ymode=log,
-ytick pos=both,
+ylabel={Parallel efficiency},
+ymin=0.826749025759338, ymax=1.05903374791091,
 ytick style={color=black}
 ]
 \addplot [semithick, color0, mark=*, mark size=2, mark options={solid}]
 table {%
-8192 37.42741
-4096 74.320769
-1024 265.778503
-256 1002.823942
+128 0.837307422220773
+64 0.843324110047893
+16 0.943289177529907
+4 1
 };
 \addlegendentry{1 thread per rank}
 \addplot [semithick, color1, mark=*, mark size=2, mark options={solid}]
 table {%
-8192 30.554646
-4096 61.728044
-1024 239.114811
-256 968.240309
+128 1.02564592590927
+64 1.01536501585892
+16 1.04847535144948
+4 1.03571802648427
 };
 \addlegendentry{4 threads per rank}
 \addplot [semithick, color2, mark=*, mark size=2, mark options={solid}]
 table {%
-8192 34.79345
-4096 65.524512
-1024 251.86032
-256 1032.547306
+128 0.900693900360556
+64 0.956535111242034
+16 0.995416767119171
+4 0.971213557163646
 };
 \addlegendentry{16 threads per rank}
 \addplot [semithick, color3, mark=*, mark size=2, mark options={solid}]
 table {%
-8192 33.567934
-4096 65.748863
-1024 267.762241
-256 1032.791601
+128 0.933576912642285
+64 0.953271182423337
+16 0.936300744136661
+4 0.970983827743193
 };
 \addlegendentry{32 threads per rank}
 \addplot [semithick, color4, mark=*, mark size=2, mark options={solid}]
 table {%
-8192 33.58101
-4096 66.852355
-1024 267.678399
-256 1032.831161
+128 0.933213390172005
+64 0.937536102879248
+16 0.936594011457757
+4 0.970946636649744
 };
 \addlegendentry{64 threads per rank}
 \end{axis}

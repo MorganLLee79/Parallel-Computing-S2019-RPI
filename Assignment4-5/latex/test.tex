@@ -1,0 +1,56 @@
+\documentclass[letter,12pt,english]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage{pgfplots}
+\usepackage{xintexpr}
+\pgfplotsset{compat=newest}
+\usepgfplotslibrary{groupplots}
+
+\usepackage[margin=1in, showframe]{geometry}
+\usepackage{microtype}
+
+\newlength\figureheight
+\newlength\figurewidth
+\setlength\figureheight{5in}
+\setlength\figurewidth{6in}
+
+\begin{document}
+\begin{figure}
+\centering
+\input{runtime_comparison.tex}
+\caption{Runtime comparison}
+\label{fig:runtime-comparison}
+\end{figure}
+
+\begin{figure}
+\centering
+\input{efficiency_comparison.tex}
+\caption{Parallel efficiency comparison}
+\label{fig:efficiency-comparison}
+\end{figure}
+
+\begin{figure}
+\centering
+\input{io_comparison.tex}
+\caption{I/O time comparison}
+\label{fig:io-comparison}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \setlength\figureheight{\textwidth}
+    \setlength\figurewidth{\textwidth}
+    \input{heatmap.tex}
+    \caption{Heatmaps}
+    \label{fig:heatmap}
+\end{figure}
+
+\begin{figure}
+\centering
+\setlength\figureheight{5in}
+\setlength\figurewidth{6in}
+\input{alive_cells.tex}
+\caption{The number of alive cells in given ticks with threshold of 25\%.}
+\label{fig:alive-cells}
+\end{figure}
+\end{document}

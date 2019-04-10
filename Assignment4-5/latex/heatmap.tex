@@ -1,0 +1,50 @@
+% This file was created by matplotlib2tikz v0.7.3.
+\begin{tikzpicture}
+
+\begin{groupplot}[group style={group size=2 by 2,
+    xticklabels at=edge bottom,
+    yticklabels at=edge left,
+    horizontal sep=0.5cm,
+    vertical sep=1cm,
+    },
+height=0.45\figureheight,
+width=0.45\figurewidth,
+point meta max=1024,
+point meta min=0,
+tick align=outside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+xmin=0, xmax=1024,
+xtick style={color=black},
+y grid style={white!69.01960784313725!black},
+ymin=0, ymax=1024,
+ytick style={color=black}
+]
+\nextgroupplot[
+title={0\% threshold},
+]
+\addplot graphics [includegraphics cmd=\pgfimage,xmin=0, xmax=1024, ymin=0, ymax=1024] {heatmap-000.png};
+
+\nextgroupplot[
+colorbar right,
+colormap/viridis,
+every colorbar/.append style={height=
+  2*\pgfkeysvalueof{/pgfplots/parent axis height}+
+  \pgfkeysvalueof{/pgfplots/group/vertical sep}},
+colorbar style={ylabel={Live cell counts}, ytick pos=right},
+title={25\% threshold},
+]
+\addplot graphics [includegraphics cmd=\pgfimage,xmin=0, xmax=1024, ymin=0, ymax=1024] {heatmap-001.png};
+
+\nextgroupplot[
+title={50\% threshold},
+]
+\addplot graphics [includegraphics cmd=\pgfimage,xmin=0, xmax=1024, ymin=0, ymax=1024] {heatmap-002.png};
+
+\nextgroupplot[
+title={75\% threshold},
+]
+\addplot graphics [includegraphics cmd=\pgfimage,xmin=0, xmax=1024, ymin=0, ymax=1024] {heatmap-003.png};
+\end{groupplot}
+
+\end{tikzpicture}
