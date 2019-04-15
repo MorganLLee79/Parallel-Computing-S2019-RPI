@@ -1,0 +1,47 @@
+0 1 2
+1 0 4
+1 2 3
+edge based example:
+u v cap flow
+
+node based: Use this one, since need neighbors
+Store both in and out edges in separate lists
+
+Plans:
+https://pdfs.semanticscholar.org/8e77/c56a615f078d982223a61246b2570503b6ea.pdf
+step 1: set source as initial value
+
+step 2: update labels
+iterate over nodes:
+	queue up unlabelled node neighbors, send out, receive label
+
+step 3: updates flows
+iterate backwards over nodes
+
+
+Data dependencies:
+Root: needs labels, edges for nodes
+1-n ranks: edge capacities, flows
+
+
+Applications:
+billion scale graphs -> web?
+
+Costs:
+2 messages per graph node (edge?)
+
+
+Meeting with Carrothers:
+explaining issues:
+-Dependency on shared memory, existing papers assumed a shared memory system
+	so that each processor could independently traverse the graph,
+	and track visited nodes in synchronized memory
+-Using MPI would result in significant communication costs,
+	bottle neck master process/rank tracking what's been visited,
+	queue of nodes to process
+-Can't scale beyond one computation node w/ just threads
+
+-Would need to either focus project on analyzing why shared memory is necessary, effects of the communication costs
+-Or swap to using only 1 computation node w/ threads or CUDA
+
+-Also, probably using c++?

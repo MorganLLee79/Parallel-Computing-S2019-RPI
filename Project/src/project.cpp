@@ -26,6 +26,15 @@ struct vertex {
 map<int, vertex *> graph; //<id, vertex>, vertex holds edges
 int graph_size;
 
+// Hold the queued nodes to read
+// BFS: highest priority = lowest distance from source
+// Send w/ .pop(), add with queue.push(make_pair(distance, vert_id));
+// Define with vector<int> and greater<int> to define container (default) and
+// reverse order? Or just save negative values for distances
+
+// priority_queue<pair<int, int>, vector<int>, greater<int>> queue;
+priority_queue<pair<int, int>> queue;
+
 /*
  * Follow the file path and read in the edge list graph there
  * Reading from disk and loading into compute node's memory
@@ -75,6 +84,32 @@ void read_file(char *file_path, int input_graph_size) {
   fclose(file);
 }
 
-// For now going to assume all ranks will load the entire graph
+// Over the global graph, find the maximum flow
+// Return: the network's maximum flow
+int max_flow(int source_id, int sink_id) {
 
+  // Store all flows? TODO. center rank managing? when sending back value to
+  // root, set to calculated value.
+  // To cover f(u, v) = x
+
+  // Default all edges to flow = 0
+
+  // Add initial vertices adjacent to source to queue
+
+  // Iterate over queue until all paths tested
+  // TODO: potential issue with max queue size? m * size pair<int,int>
+  while (!queue.empty()) {
+    // Lock each vertex access?
+
+    // Push a maximum flow to the vertex
+
+    // Go over each edge, add capacity of each edge
+
+    // Add to queue the next vertices, with distance/priorty += 1
+  }
+
+  return -1;
+}
+
+// For now going to assume all ranks will load the entire graph
 int main(int argc, char **argv) { return -1; }
