@@ -1,5 +1,5 @@
 /Assignment4-5/assignment4-5
 /Assignment4-5/assignment4-5-debug
 *.o
-*.o
+*.out
 /Project/src/projectv0.cpp
