@@ -99,7 +99,7 @@ Inter-rank communication:
 	-impression on implementation plans
 	-any zoltan advice?
 
-	-Resolved deadlock detection: go around twice
+	-Resolved deadlock detection: go around twice to starting rank, thread 0 watch?
 
 input, start zoltan, load data into it, get partition, begin algorithm
 
