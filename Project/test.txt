@@ -19,6 +19,11 @@ step 3: updates flows
 iterate backwards over nodes
 
 
+flows: a few changed, edge linked; send out as diff
+capacities: only read, edge linked
+labels: written once by root; send w/ node
+
+
 Data dependencies:
 Root: needs labels, edges for nodes
 1-n ranks: edge capacities, flows
@@ -39,9 +44,79 @@ explaining issues:
 -Using MPI would result in significant communication costs,
 	bottle neck master process/rank tracking what's been visited,
 	queue of nodes to process
+	other ranks just do min()
 -Can't scale beyond one computation node w/ just threads
 
 -Would need to either focus project on analyzing why shared memory is necessary, effects of the communication costs
 -Or swap to using only 1 computation node w/ threads or CUDA
 
 -Also, probably using c++?
+
+zoltan parallel graph partitioner; each rank read it, components based, then analyze graph
+http://www.cs.sandia.gov/~kddevin/papers/zoltan_tutorial_dagstuhl09.pdf
+https://cs.sandia.gov/Zoltan/ug_html/ug_cpp.html
+-combinatorial, not geometric, probably
+-seems like it's designed for meshes, materials-research type stuff
+-slide 34: notes graph model on non-mesh not good? Looking at updated
+-slide 11 with instructions; also mpicc -lzoltan
+-static partition, do once, then ignore after that
+
+https://cs.sandia.gov/Zoltan/ug_html/ug_cpp.html
+^- Create Zoltan object zz, like MPI, then call stuff like Zoltan_Set_<fxn_type>_Fn(), where <fxn_type> is one of the "application-supplied query functions"
+-Functions to be used: (https://cs.sandia.gov/Zoltan/ug_html/ug_query_lb.html)
+	Zoltan_obj_list_fn: returns arrays of current processor's data
+	Zoltan_num_obj_fn: determines ^'s array size
+	edge_list_fn, num_edges_fn
+	Also: zoltan load balancing stuff: https://cs.sandia.gov/Zoltan/ug_html/ug_interface_lb.html
+-global id = node number, local IDs = indices
+
+slota, xtrapulp
+https://www.cs.rpi.edu/~slotag/publications.html
+
+Testing ideas:
+Mesh
+Low/high connectivity; short/long paths/diameters?
+
+
+----
+Node processing order: splitting up neighbors? p-queue or?...
+	Ea rank will have own queue, act independently, no master rank w/ zoltan
+Edge processing order: heuristic? lowest ID or weight?
+Inter-rank communication:
+	-when labeled new node w/ neighbors in other ranks, send messages to neighbors that they were labeled, that the label was this
+	-send request and wait by doing some other stuff while it does that (mpi_test/probe)
+	-Look at whiteboard picture; a->b, u labeled: send msg to label v; a->b, v labeled in a: send msg w/ l(v), B use l(v) and flow to calculate l(u)
+-new ranks start?: queue found cut edge, compute, done and add to other rank's queue
+	-compare and swap to lock nodes when going through in-rank queue edges
+
+-In ranks: queue of edges by capacities, farm out/lock to threads
+-Store flows on u (start node of edges)
+-In step1-3 cycles, labels get reset, flows stay
+-terminate when all queues are empty; propagate only if all prior and current is empty
+
+-Ask Prof on "deadlock detection" issue
+	-all rank queues empty
+	-impression on implementation plans
+	-any zoltan advice?
+
+input, start zoltan, load data into it, get partition, begin algorithm
+
+Nodes:
+	ID
+	in/out edge lists (IDs); pairs w/ destination ranks using LB_Partition, num_import/export, import/export_procs; when reading in, import/export, get values, set
+	edge capacities
+	out flows
+	label stuff
+
+
+Project Segments: keep working on, re-evaluate Monday
+-setup: get edges, zoltan (use migration queries, https://cs.sandia.gov/Zoltan/ug_html/ug_interface_mig.html#Zoltan_Invert_Lists)
+-implement algorithm: accepting messages, going through rank queue, etc.
+-input generation (networkx); testing
+
+-Paper: start
+	-List all papers we have looked at, take all sources
+	all papers on Zoltan, parallel network flow, MPI, amos/q or blue gene, on network flow/applications
+	-Initial text on google docs, overleaf trial for type setting/figures
+
+-output final network state (optional; debug/test)
