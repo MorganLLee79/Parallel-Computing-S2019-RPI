@@ -2,28 +2,29 @@
  * Eric Johnson, Chris Jones, Harrison Lee
  */
 
-// Making initial source code for now
-
-#include <stdio.h>
-#include <stdlib.h>
-
 #include "zoltan.h"
+#include <vector>
 
 using namespace std;
 
-/************MPI Stuff ***************/
-
+/************MPI Variables *********************/
 int mpi_rank;
 int mpi_size;
-
-/************Zoltan Library stuff*****/
+/************Zoltan Library Variables **********/
 struct Zoltan_Strcut *zz;
 float version;
-/*************************************/
+/***********************************************/
 
-struct edge {
+struct in_edge {
   unsigned long long destination_node_id;
   int rank_location;
+};
+
+struct out_edge {
+  unsigned long long destination_node_id;
+  int rank_location;
+  int flow;
+  int capacity;
 };
 
 struct label {
@@ -35,14 +36,8 @@ struct vertex {
   unsigned long long id = -1; // Should match index
 
   // Lists of the edges, which are pairs of capacities and vertex IDs
-  vector<edge> out_edges;
-  vector<edge> in_edges;
-  // edge[] out_edges;
-  // edge[] in_edges;
-
-  // Match indices with out_edges
-  int[] flows;
-  int[] capacities;
+  vector<struct out_edge> out_edges;
+  vector<struct in_edge> in_edges;
 };
 
 // Something to store vertices. array?
@@ -77,7 +72,16 @@ void user_return_obj_list(void *data, int num_gid_entries, int num_lid_entries,
   int *result =
       (int *)data; // TODO set to full data set that is being split up (?)
 
-  // ZOLTAN_ID_PTRs are arrays of the partitioned global IDs, assigned objects
+  // Each global ID is a unsigned long long (2*sizeof(int)), local are ints
+  // (array indices)
+  if (num_gid_entries != 2 /*TODO verify*/ || num_lid_entries != 1) {
+    *ierr = ZOLTAN_FATAL;
+    return;
+  }
+
+  // ZOLTAN_ID_PTRs are arrays of the partitioned IDs, assigned objects
+
+  // Use LB_Partition to allocate; call once, so after ran it?
 
   // Global IDs are vertex IDs, local IDs are array indices
   // TODO check, update all edges to have correct allocated ranks in them
@@ -85,6 +89,37 @@ void user_return_obj_list(void *data, int num_gid_entries, int num_lid_entries,
   *result = local_vertex_count;
 
   *ierr = ZOLTAN_OK;
+}
+
+// Copied from PDF, temporary
+/* Return coordinates for objects requested by Zoltan in globalIDs array. */
+void user_geom_multi_fn(void *data, int nge, int nle, int numObj,
+                        ZOLTAN_ID_PTR globalIDs, ZOLTAN_ID_PTR localIDs,
+                        int dim, double *geomVec, int *err) {
+  /* Cast data pointer provided in Zoltan_Set_Fn to application data type. */
+  /* Application data is an array of Particle structures. */
+  struct Particle *user_particles = (struct Particle *)data; // Source data
+
+  /* Assume for this example that each globalID and localID is one integer. */
+  /* Each globalID is a global particle number; each localID is an index */
+  /* into the user’s array of Particles. */
+  if (nge != 1 || nle != 1) {
+    *err = ZOLTAN_FATAL;
+    return;
+  }
+  /* Loop over objects for which coordinates are requested */
+  int i, j = 0;
+  for (i = 0; i < numObj; i++) { // Iterate over localIDs, things we have
+    /* Copy the coordinates for the object globalID[i] (with localID[i]) */
+    /* into the geomVec vector. Note that Zoltan allocates geomVec. */
+    // geomVec being set: output?; using data, data=input?
+    geomVec[j++] = user_particles[localIDs[i]].x;
+    if (dim > 1)
+      geomVec[j++] = user_particles[localIDs[i]].y;
+    if (dim > 2)
+      geomVec[j++] = user_particles[localIDs[i]].z;
+  }
+  *err = ZOLTAN_OK;
 }
 
 /********************************************/
@@ -109,10 +144,35 @@ int main(int argc, char **argv) {
                 NULL);
   Zoltan_Set_Fn(zz, ZOLTAN_OBJ_LIST_FN_TYPE, (void (*)())user_return_obj_list,
                 NULL);
+  Zoltan_Set_Fn(zz, ZOLTAN_OBJ_SIZE_FN_TYPE, (void (*)())user_return_obj_size,
+                NULL);
+
+  Zoltan_Set_Fn(zz, ZOLTAN_PACK_OBJ_FN_TYPE, (void (*)())user_-- --, NULL);
+  Zoltan_Set_Fn(zz, ZOLTAN_UNPACK_OBJ_FN_TYPE, (void (*)())user_-- ---, NULL);
   Zoltan_Set_Fn(zz, ...... _);
 
   /* Set Zoltan paramaters. */
-  Zoltan_SetParam(zz, "DEBUG?", "4?");
+  Zoltan_Set_Param(zz, "DEBUG?", "4?");
+  Zoltan_Set_Param(zz, "LB_METHOD", "GRAPH");
+  Zoltan_Set_Param(zz, "AUTO_MIGRATE",
+                   "TRUE"); // Might need user-guided for edges?
+
+  // Basing on https://cs.sandia.gov/Zoltan/ug_html/ug_examples_lb.html
+  int num_changes; // Set to 1/True if decomposition was changed
+  int num_imported, num_exported, *import_processors, *export_processors;
+  int *import_to_parts, *export_to_parts;
+  int num_gid_entries, num_lid_entries;
+  ZOLTAN_ID_PTR import_global_ids, export_global_ids;
+  ZOLTAN_ID_PTR import_local_ids, export_local_ids;
+
+  // Parameters essential: global info (output), import info, export info
+  zz->LB_Partition(&num_changes, &num_gid_entries, &num_lid_entries,
+                   &num_imported, &import_global_ids, &import_local_ids,
+                   *&import_processors, *&import_to_parts, &num_exported,
+                   &export_global_ids, &export_local_ids, *&export_processors,
+                   *&export_to_parts);
+  if (new)
+    perform_data_migration(...);
 
   /*begin alogirhtm?*/
 
