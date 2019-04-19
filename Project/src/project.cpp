@@ -2,29 +2,33 @@
  * Eric Johnson, Chris Jones, Harrison Lee
  */
 
-// Making initial source code for now
-
-#include <stdio.h>
-#include <stdlib.h>
+#include <vector>
 
 using namespace std;
 
-typedef pair<unsigned long long, int>
-    edge; // Node ID, foreign mpi rank stored at
-typedef ? pair ? <unsigned long long, int> label; // Node ID, +/- value
+struct in_edge {
+  unsigned long long destination_node_id;
+  int rank_location;
+};
+
+struct out_edge {
+  unsigned long long destination_node_id;
+  int rank_location;
+  int flow;
+  int capacity;
+};
+
+struct label {
+  unsigned long long previous_node;
+  int value;
+};
 
 struct vertex {
   unsigned long long id = -1; // Should match index
 
   // Lists of the edges, which are pairs of capacities and vertex IDs
-  // vector<edge> out_edges;
-  // vector<edge> in_edges;
-  edge[] out_edges;
-  edge[] in_edges;
-
-  // Match indices with out_edges
-  int[] flows;
-  int[] capacities;
+  vector<struct out_edge> out_edges;
+  vector<struct in_edge> in_edges;
 };
 
 int max_flow(int source_id, int sink_id) { return -1; }
