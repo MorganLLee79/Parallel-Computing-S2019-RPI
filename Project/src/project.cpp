@@ -68,9 +68,25 @@ struct thread_params {
 };
 
 /**
+ * Maps global IDs to local IDs. Needs to be fast for border nodes.
+ *
+ * @param id The global ID to lookup
+ * @return The local ID of the given node, or @c (local_id)-1 if not found.
+ */
+local_id lookup_global_id(global_id id) {
+  // FIXME: very slow implementation for testing; replace with std::map, at
+  //  least for border nodes.
+  for (local_id i = 0; i < vertices.size(); ++i) {
+    if (vertices[i].id == id) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
  * Inserts edges between @c vertices[vert_idx] and neighboring unlabelled nodes
- * into the edge
- * queue.
+ * into the edge queue.
  *
  * @param vert_idx The local index of a newly labelled node.
  */
@@ -80,6 +96,9 @@ void insert_edges(local_id vert_idx) {
     const out_edge &edge = v.out_edges[i];
     if (edge.rank_location == mpi_rank && labels[edge.vert_index].value != 0) {
       continue; // already has a label, skip it
+    }
+    if (edge.dest_node_id == labels[vert_idx].previous_node) {
+      continue; // we came from here, so skip it
     }
     edge_entry temp = {
         vert_idx, // vertex_index
@@ -93,6 +112,9 @@ void insert_edges(local_id vert_idx) {
     const in_edge &edge = v.in_edges[i];
     if (edge.rank_location == mpi_rank && !labels[edge.vert_index].value) {
       continue; // already has a label, skip it
+    }
+    if (edge.dest_node_id == labels[vert_idx].previous_node) {
+      continue; // we came from here, so skip it
     }
     edge_entry temp = {
         vert_idx, // vertex_index
@@ -110,6 +132,7 @@ void insert_edges(local_id vert_idx) {
  * @param entry The edge to process.
  */
 local_id handle_outgoing_edge(const struct edge_entry &entry);
+
 /**
  * Sets @c sink_found and returns the local id of the sink node if it was found;
  * otherwise returns (local_id)-1.
@@ -146,14 +169,10 @@ void *run_algorithm(struct thread_params *params) {
       while (edge_queue.pop(entry))
         ;
       // find source node
-      // TODO: spread this work between all threads? Or maybe store the index if
-      //  we ever have to loop over the entire graph anyway
-      for (size_t i = 0; i < vertices.size(); i++) {
-        if (vertices[i].id == source_id) {
-          set_label(source_id, i,
-                    numeric_limits<decltype(labels[i].value)>::max());
-          break;
-        }
+      local_id i = lookup_global_id(source_id);
+      if (i != (local_id)-1) {
+        set_label(source_id, i,
+                  numeric_limits<decltype(labels[i].value)>::max());
       }
     }
 
@@ -177,11 +196,67 @@ void *run_algorithm(struct thread_params *params) {
     // Thread 0 handles all incoming messages, while the other threads run the
     // actual algorithm
     if (tid == 0) {
-      // TODO: handle messages
-      //  may need a lookup table from global ids of border nodes to local ids
+      struct message_data msg = {};
+      local_id vert_idx;
+      int curr_flow;
       while (!sink_found) {
         // if message tag is SINK_FOUND, set do_step_3 and sink_found to true,
         // so thread 0 on this rank will do step 3.
+        MPI_Status stat;
+        MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
+                 MPI_COMM_WORLD, &stat);
+        switch (stat.MPI_TAG) {
+        case SET_TO_LABEL:
+          // try to set label of "to" node
+          vert_idx = lookup_global_id(msg.receivers_node);
+          if (vert_idx == (local_id)-1) {
+            cerr << "Warning: SET_TO_LABEL sent to wrong rank\n";
+            continue;
+          }
+          if (set_label(msg.senders_node, vert_idx, msg.label_value)) {
+            // found sink!
+            backtrack_idx = vert_idx;
+            do_step_3 = true;
+            sink_found = true;
+          }
+          break;
+        case COMPUTE_FROM_LABEL:
+          // compute and set label of "from" node
+          vert_idx = lookup_global_id(msg.receivers_node); // from_id
+          if (vert_idx == (local_id)-1) {
+            cerr << "Warning: COMPUTE_FROM_LABEL sent to wrong rank\n";
+            continue;
+          }
+
+          // find edge for the sender's node, and get the flow through it
+          curr_flow = 0;
+          for (auto it = vertices[vert_idx].out_edges.begin();
+               it != vertices[vert_idx].out_edges.end(); ++it) {
+            if (it->dest_node_id == msg.senders_node) {
+              curr_flow = it->flow;
+            }
+          }
+          if (curr_flow <= 0) {
+            continue; // discard edge
+          }
+
+          // set label and add edges
+          if (set_label(msg.senders_node, vert_idx,
+                        max(msg.label_value, -curr_flow))) {
+            // found sink!
+            backtrack_idx = vert_idx;
+            do_step_3 = true;
+            sink_found = true;
+          }
+          break;
+        case SINK_FOUND:
+          do_step_3 = true;
+          sink_found = true;
+          break;
+        default:
+          cerr << "Error: got invalid tag in step 2: " << stat.MPI_TAG << endl;
+          break;
+        }
       }
     } else {
       struct edge_entry entry = {0, false, 0};
@@ -189,10 +264,13 @@ void *run_algorithm(struct thread_params *params) {
         {
           ScopedLock l(edge_queue.h_lock);
           // wait for the queue to become non-empty
-          while (!edge_queue.pop(entry))
+          while (!edge_queue.pop(entry) && !sink_found)
             ;
           // release the lock on edge_queue now, so other threads can get edges
         }
+
+        if (sink_found)
+          break;
 
         // process edge
         if (entry.is_outgoing) {
@@ -288,7 +366,6 @@ local_id handle_incoming_edge(const struct edge_entry &entry) {
 
   // check if "from" node (which holds the flow) is on another rank
   if (rev_edge.rank_location == mpi_rank) {
-    // c
     local_id from_id = rev_edge.vert_index;
     int curr_flow = vertices[from_id].out_edges[to_id].flow;
     if (curr_flow <= 0) {
