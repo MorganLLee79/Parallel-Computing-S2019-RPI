@@ -40,6 +40,9 @@ enum message_tags : int {
   /// Another rank found the source node in step 3; go back to step 1. Pass on
   /// to the next rank.
   SOURCE_FOUND,
+  /// Sent to rank 0 after the algorithm finishes, contains the flow through
+  /// the graph
+  TOTAL_FLOW,
 };
 
 /****************** Globals ********************/
@@ -393,7 +396,7 @@ local_id handle_incoming_edge(const struct edge_entry &entry) {
   return -1;
 }
 
-int max_flow() {
+int calc_max_flow() {
   Barrier barrier(num_threads);
   pthread_t threads[num_threads];
   struct thread_params shared_params = {-1, barrier};
@@ -413,10 +416,33 @@ int max_flow() {
     pthread_join(threads[i], NULL);
   }
 
-  // TODO: sum up flow from source node
-  // must be done from the rank that has the source node, and sent to rank 0
+  // sum up flow out of source node
+  local_id src_idx = lookup_global_id(source_id);
+  int total_flow = -1;
+  if (src_idx != (local_id)-1) {
+    total_flow = 0;
+    for (int i = 0; i < vertices[src_idx].out_edges.size(); ++i) {
+      total_flow += vertices[src_idx].out_edges[i].flow;
+    }
+  }
+  // send to rank 0
+  if (mpi_rank == 0) {
+    if (total_flow == -1) {
+      // need to receive the total flow from another node
+      MPI_Status stat;
+      MPI_Recv(&total_flow, 1, MPI_INT, MPI_ANY_SOURCE, TOTAL_FLOW,
+               MPI_COMM_WORLD, &stat);
+      // TODO: check status?
+    }
+    // otherwise, we have already have the flow
+  } else {
+    if (total_flow != -1) {
+      MPI_Send(&total_flow, 1, MPI_INT, 0, TOTAL_FLOW, MPI_COMM_WORLD);
+      total_flow = -1;
+    }
+  }
 
-  return 0;
+  return total_flow;
 }
 
 // For now going to assume all ranks will load the entire graph
