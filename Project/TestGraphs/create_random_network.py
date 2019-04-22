@@ -80,3 +80,4 @@ graph_file.write(f"{n:d} {m:d}\n")
 for u in range(n):
     graph_file.write(" ".join(str(v)+" "+str(np.random.randint(1,C+1)) for v in adj_list[u]) + "\n")
 
+graph_file.close()
