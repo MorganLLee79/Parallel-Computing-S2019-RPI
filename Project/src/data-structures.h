@@ -46,7 +46,7 @@ struct edge_entry {
   /// Whether the corresponding edge is in `out_edges` or `in_edges`
   bool is_outgoing;
   /// The index of the edge in its edge list
-  int edge_index;
+  unsigned int edge_index;
 };
 
 class EdgeQueue;

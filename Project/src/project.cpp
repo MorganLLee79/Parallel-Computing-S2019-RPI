@@ -68,13 +68,39 @@ struct thread_params {
 };
 
 /**
- * Inserts edges between @p vert and neighboring unlabelled nodes into the edge
+ * Inserts edges between @c vertices[vert_idx] and neighboring unlabelled nodes
+ * into the edge
  * queue.
  *
- * @param vert A newly labelled node.
+ * @param vert_idx The local index of a newly labelled node.
  */
-void insert_edges(const vertex &vert) {
-  // TODO: implement
+void insert_edges(local_id vert_idx) {
+  const struct vertex &v = vertices[vert_idx];
+  for (unsigned int i = 0; i < v.out_edges.size(); ++i) {
+    const out_edge &edge = v.out_edges[i];
+    if (edge.rank_location == mpi_rank && labels[edge.vert_index].value != 0) {
+      continue; // already has a label, skip it
+    }
+    edge_entry temp = {
+        vert_idx, // vertex_index
+        true,     // is_outgoing
+        i,        // edge_index
+    };
+    edge_queue.push(temp);
+  }
+
+  for (unsigned int i = 0; i < v.in_edges.size(); ++i) {
+    const in_edge &edge = v.in_edges[i];
+    if (edge.rank_location == mpi_rank && !labels[edge.vert_index].value) {
+      continue; // already has a label, skip it
+    }
+    edge_entry temp = {
+        vert_idx, // vertex_index
+        false,    // is_outgoing
+        i,        // edge_index
+    };
+    edge_queue.push(temp);
+  }
 }
 
 /**
@@ -219,7 +245,7 @@ bool set_label(global_id prev_node, local_id curr_idx, int value) {
       return true;
     } else {
       // add edges to queue
-      insert_edges(vertices[curr_idx]);
+      insert_edges(curr_idx);
     }
   }
   return false;
