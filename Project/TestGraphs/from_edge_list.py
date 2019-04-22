@@ -1,7 +1,6 @@
 ###
-### Create undirected (roadnet) graph from an edgelist file.
+### Create directed graphs from an edgelist file.
 ### We give capacities of ONE to every edge.
-###   (But note, each undirected edge is technically 2 directed edges.)
 ###
 
 import networkx as nx
@@ -13,18 +12,20 @@ if len(sys.argv) != 3:
 file_path = sys.argv[1]
 output_file_path = sys.argv[2]
 
-# We are just assuming undirected graphs, so technically the network
-#   will have pairs of opposing directed edges.
-G = nx.read_edgelist(file_path)
+# Create a directed graph from the edgelist file
+G = nx.read_edgelist(file_path, create_using=nx.DiGraph())
+
+# Remove self-loops
+G.remove_edges_from(G.selfloop_edges())
 
 # Consider only the largest component
-G = max(nx.connected_component_subgraphs(G), key=len)
+G = max(nx.strongly_connected_component_subgraphs(G), key=len)
 
 G = nx.convert_node_labels_to_integers(G)
 
 graph_file = open(output_file_path, "w")
 n = nx.number_of_nodes(G)
-m = nx.number_of_edges(G) * 2
+m = nx.number_of_edges(G)
 graph_file.write(f"{n:d} {m:d}\n")
 
 for u in range(n):
