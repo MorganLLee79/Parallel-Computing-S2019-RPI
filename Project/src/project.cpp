@@ -421,7 +421,7 @@ int calc_max_flow() {
   int total_flow = -1;
   if (src_idx != (local_id)-1) {
     total_flow = 0;
-    for (int i = 0; i < vertices[src_idx].out_edges.size(); ++i) {
+    for (local_id i = 0; i < vertices[src_idx].out_edges.size(); ++i) {
       total_flow += vertices[src_idx].out_edges[i].flow;
     }
   }
