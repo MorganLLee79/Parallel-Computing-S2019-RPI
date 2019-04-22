@@ -2,7 +2,7 @@
 // Purpose:
 #include "data-structures.h"
 
-const struct label EMPTY_LABEL = {0, -1};
+const struct label EMPTY_LABEL = {(global_id)-1, 0};
 
 EdgeQueue::EdgeQueue() {
   auto *node = new QueueNode(); // Allocate a new node

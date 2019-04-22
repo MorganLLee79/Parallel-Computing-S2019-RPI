@@ -113,6 +113,12 @@ void *run_algorithm(struct thread_params *params) {
     if (tid == 0) {
       // wipe previous labels
       fill(labels.begin(), labels.end(), EMPTY_LABEL);
+      // setup globals
+      sink_found = false;
+      // empty out edge queue
+      edge_entry entry = {};
+      while (edge_queue.pop(entry))
+        ;
       // find source node
       // TODO: spread this work between all threads? Or maybe store the index if
       //  we ever have to loop over the entire graph anyway
@@ -123,12 +129,6 @@ void *run_algorithm(struct thread_params *params) {
           break;
         }
       }
-      // setup globals
-      sink_found = false;
-      // empty out edge queue
-      edge_entry entry = {};
-      while (edge_queue.pop(entry))
-        ;
     }
 
     /**
