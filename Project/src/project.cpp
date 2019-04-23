@@ -254,7 +254,6 @@ void *run_algorithm(struct thread_params *params) {
             // found sink!
             cerr << "Warning: outgoing edge from sink!\n";
             bt_idx = vert_idx;
-            sink_value = labels[vert_idx].value;
             do_step_3 = true;
             sink_found = true;
           }
@@ -300,6 +299,9 @@ void *run_algorithm(struct thread_params *params) {
     // go to the beginning of the loop and wait if not handling step 3.
     if (!do_step_3) {
       continue;
+    }
+    if (bt_idx != (local_id)-1) {
+      sink_value = labels[bt_idx].value;
     }
     // tell the next rank to stop
     MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size, SINK_FOUND,
@@ -571,6 +573,7 @@ int main(int argc, char **argv) {
                                offsetof(message_data, label_value)};
     MPI_Type_create_struct(count, block_lengths, offsets, types,
                            &MPI_MESSAGE_TYPE);
+    MPI_Type_commit(&MPI_MESSAGE_TYPE);
   }
 
   // do setup
