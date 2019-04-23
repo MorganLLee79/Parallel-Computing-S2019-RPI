@@ -4,6 +4,7 @@
 
 #include <mpi.h>
 
+#include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <vector>
@@ -305,7 +306,6 @@ void *run_algorithm(struct thread_params *params) {
              MPI_COMM_WORLD);
     // TODO: may need to wait for message to make it all the way around before
     //  starting?
-    struct message_data msg = {};
     // start backtracking
     bool wait_for_sink_found = bt_idx != (local_id)-1;
     bool wait_for_source_found = false;
@@ -335,7 +335,7 @@ void *run_algorithm(struct thread_params *params) {
         // UPDATE_FLOW message, then wait for incoming messages
         if (l.prev_rank_loc != mpi_rank) {
           // previous node is remote, send an UPDATE_FLOW message
-          msg = {
+          struct message_data msg = {
               vertices[bt_idx].id, // sender's node
               l.prev_node,         // receiver's node
               sink_value,          // label value
@@ -355,7 +355,7 @@ void *run_algorithm(struct thread_params *params) {
         }
       } else {
         // wait for incoming messages
-        msg = {};
+        struct message_data msg = {};
         MPI_Status stat;
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
