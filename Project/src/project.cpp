@@ -62,15 +62,6 @@ void user_return_num_obj(void *data, int *ierr) {
   *ierr = ZOLTAN_OK;
 }
 
-// query function, returns the number of objects assigned to the processor
-void user_return_num_obj(void *data, int *ierr) {
-  int *result = (int *)data;
-
-  *result = local_vertex_count;
-
-  *ierr = ZOLTAN_OK;
-}
-
 // https://cs.sandia.gov/Zoltan/ug_html/ug_query_lb.html#ZOLTAN_OBJ_LIST_FN
 void user_return_obj_list(void *data, int num_gid_entries, int num_lid_entries,
                           ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids,
@@ -99,36 +90,37 @@ void user_return_obj_list(void *data, int num_gid_entries, int num_lid_entries,
   *ierr = ZOLTAN_OK;
 }
 
-// Copied from PDF, temporary
-/* Return coordinates for objects requested by Zoltan in globalIDs array. */
-void user_geom_multi_fn(void *data, int nge, int nle, int numObj,
-                        ZOLTAN_ID_PTR globalIDs, ZOLTAN_ID_PTR localIDs,
-                        int dim, double *geomVec, int *err) {
-  /* Cast data pointer provided in Zoltan_Set_Fn to application data type. */
-  /* Application data is an array of Particle structures. */
-  struct Particle *user_particles = (struct Particle *)data; // Source data
+// // Copied from PDF, temporary
+// /* Return coordinates for objects requested by Zoltan in globalIDs array. */
+// void user_geom_multi_fn(void *data, int nge, int nle, int numObj,
+//                         ZOLTAN_ID_PTR globalIDs, ZOLTAN_ID_PTR localIDs,
+//                         int dim, double *geomVec, int *err) {
+//   /* Cast data pointer provided in Zoltan_Set_Fn to application data type. */
+//   /* Application data is an array of Particle structures. */
+//   struct Particle *user_particles = (struct Particle *)data; // Source data
 
-  /* Assume for this example that each globalID and localID is one integer. */
-  /* Each globalID is a global particle number; each localID is an index */
-  /* into the user’s array of Particles. */
-  if (nge != 1 || nle != 1) {
-    *err = ZOLTAN_FATAL;
-    return;
-  }
-  /* Loop over objects for which coordinates are requested */
-  int i, j = 0;
-  for (i = 0; i < numObj; i++) { // Iterate over localIDs, things we have
-    /* Copy the coordinates for the object globalID[i] (with localID[i]) */
-    /* into the geomVec vector. Note that Zoltan allocates geomVec. */
-    // geomVec being set: output?; using data, data=input?
-    geomVec[j++] = user_particles[localIDs[i]].x;
-    if (dim > 1)
-      geomVec[j++] = user_particles[localIDs[i]].y;
-    if (dim > 2)
-      geomVec[j++] = user_particles[localIDs[i]].z;
-  }
-  *err = ZOLTAN_OK;
-}
+//   /* Assume for this example that each globalID and localID is one integer.
+//   */
+//   /* Each globalID is a global particle number; each localID is an index */
+//    into the user’s array of Particles.
+//   if (nge != 1 || nle != 1) {
+//     *err = ZOLTAN_FATAL;
+//     return;
+//   }
+//   /* Loop over objects for which coordinates are requested */
+//   int i, j = 0;
+//   for (i = 0; i < numObj; i++) { // Iterate over localIDs, things we have
+//     /* Copy the coordinates for the object globalID[i] (with localID[i]) */
+//     /* into the geomVec vector. Note that Zoltan allocates geomVec. */
+//     // geomVec being set: output?; using data, data=input?
+//     geomVec[j++] = user_particles[localIDs[i]].x;
+//     if (dim > 1)
+//       geomVec[j++] = user_particles[localIDs[i]].y;
+//     if (dim > 2)
+//       geomVec[j++] = user_particles[localIDs[i]].z;
+//   }
+//   *err = ZOLTAN_OK;
+// }
 
 /////////// Zoltan Migration Functions:
 // Copy all needed data for a single object into a communication buffer
@@ -142,7 +134,7 @@ void user_pack(void *data, int num_global_ids, int num_local_ids,
 
   // Send the buffer to the destination part/processor (MPI rank?)
 
-  *err = ZOLTAN_OK;
+  *ierr = ZOLTAN_OK;
 }
 
 // Copy all needed data for a single object into the application data structure
@@ -152,11 +144,11 @@ void user_unpack(void *data, int num_global_ids, ZOLTAN_ID_PTR global_id,
   vertex *input_data = (vertex *)data;
 
   vertex new_vertex;
-  new_vertex.id = (int)global_id;
+  new_vertex.id = (unsigned long long)global_id;
 
   // Need to pass in/out_edges, based on communication buffer in user_pack
 
-  *err = ZOLTAN_OK;
+  *ierr = ZOLTAN_OK;
 }
 
 /********************************************/
@@ -166,13 +158,13 @@ int max_flow(int source_id, int sink_id) { return -1; }
 // For now going to assume all ranks will load the entire graph
 int main(int argc, char **argv) {
 
-  MPI::Init(argc, argv);
-  mpi_rank = MPI::COMM_WORLD.Get_rank();
-  mpi_size = MPI::COMM_WORLD.Get_size();
+  MPI_Init(&argc, &argv);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
   // Zoltan Initialization
   Zoltan_Initialize(argc, argv, &version);
-  zz = new Zoltan(MPI::COMM_WORLD);
+  zz = Zoltan_Create(MPI_COMM_WORLD);
   // zz = Zoltan_Create(MPI_COMM_WORLD);
 
   /* Register query functions */
@@ -184,9 +176,10 @@ int main(int argc, char **argv) {
   Zoltan_Set_Fn(zz, ZOLTAN_OBJ_SIZE_FN_TYPE, (void (*)())user_return_obj_size,
                 NULL);
 
-  Zoltan_Set_Fn(zz, ZOLTAN_PACK_OBJ_FN_TYPE, (void (*)())user_-- --, NULL);
-  Zoltan_Set_Fn(zz, ZOLTAN_UNPACK_OBJ_FN_TYPE, (void (*)())user_-- ---, NULL);
-  Zoltan_Set_Fn(zz, ...... _);
+  // Pack/unpack for non-automigrate versions
+  // Zoltan_Set_Fn(zz, ZOLTAN_PACK_OBJ_FN_TYPE, (void (*)())user_-- --, NULL);
+  // Zoltan_Set_Fn(zz, ZOLTAN_UNPACK_OBJ_FN_TYPE, (void (*)())user_-- ---,
+  // NULL); Zoltan_Set_Fn(zz, ...... _);
 
   /* Set Zoltan paramaters. */
   Zoltan_Set_Param(zz, "DEBUG?", "4?");
@@ -203,11 +196,11 @@ int main(int argc, char **argv) {
   ZOLTAN_ID_PTR import_local_ids, export_local_ids;
 
   // Parameters essential: global info (output), import info, export info
-  zz->LB_Partition(&num_changes, &num_gid_entries, &num_lid_entries,
-                   &num_imported, &import_global_ids, &import_local_ids,
-                   *&import_processors, *&import_to_parts, &num_exported,
-                   &export_global_ids, &export_local_ids, *&export_processors,
-                   *&export_to_parts);
+  Zoltan_LB_Partition(zz, &num_changes, &num_gid_entries, &num_lid_entries,
+                      &num_imported, &import_global_ids, &import_local_ids,
+                      &import_processors, &import_to_parts, &num_exported,
+                      &export_global_ids, &export_local_ids, &export_processors,
+                      &export_to_parts);
   // if (num_changes?)
   // perform_data_migration(...);
 
@@ -224,7 +217,7 @@ int main(int argc, char **argv) {
                       &export_to_parts);
 
   Zoltan_Destroy(&zz);
-  MPI::Finalize();
+  MPI_Finalize();
 
   return -1;
 }
