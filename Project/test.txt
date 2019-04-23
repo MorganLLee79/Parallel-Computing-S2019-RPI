@@ -122,3 +122,5 @@ Project Segments: keep working on, re-evaluate Monday
 	-Initial text on google docs, overleaf trial for type setting/figures
 
 -output final network state (optional; debug/test)
+
+-mapping edges, border, w/ nodes? avoid killing performance

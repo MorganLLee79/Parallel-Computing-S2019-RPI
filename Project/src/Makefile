@@ -14,17 +14,18 @@
 ID_TYPE_FLAG=-DZOLTAN_ID_TYPE_LONG_LONG
 ##
 
-
-## Location of zoltan library, also location of Zoltan_config.h if
-## using the autoconf build
-
-BLD=/home/lee/Zoltan_v3.83/BuildDir/src
+ZOLTAN_LOCATION=/home/lee/Zoltan_v3.83
 
 ##
 ## Location of zoltan "src" directory (for header files)
 ##
 
-SRC=/home/lee/Zoltan_v3.83/src
+SRC=$(ZOLTAN_LOCATION)/src
+
+## Location of zoltan library, also location of Zoltan_config.h if
+## using the autoconf build
+
+BLD=$(ZOLTAN_LOCATION)/BuildDir/src
 
 # Location of zoltan header files
 
@@ -60,16 +61,17 @@ ZOLTAN_CONFIG_INCLUDE=-I$(BLD)/include
 # TPL_INCLUDE=-I$(PARMETIS) -I$(SCOTCH)/include
 # TPL_LIBS=-lparmetis -lmetis -lptscotch -lscotch -lptscotcherr -lscotcherr
 
-CXX=mpicc
+CXX=mpic++
 
-CXXFLAGS =$(ID_TYPE_FLAG)
+CXXFLAGS =$(ID_TYPE_FLAG) $(ZOLTAN_INCLUDE) -I$(BLD)/include    #"Include"/compiler flags (-I)
+LDFLAGS = $(BLD)/libzoltan.a -lm                                #Library (-l or -L stuff)
 
 # EXAMPLE_NAMES = exampleBLOCK graphHier.cpp
 
-all: project.cpp
-	$(CXX) $(CXXFLAGS) \
-        -I$(BLD)/include $(ZOLTAN_INCLUDE) \
-        -o $@ $< $(BLD)/libzoltan.a -lm
+all: project.out
+
+project.out: project.o
+	$(CXX) -o $@ $^ $(LDFLAGS)
 
 clean:
-	@rm -rf project_test.cpp
+	@rm -f project.out *.o
