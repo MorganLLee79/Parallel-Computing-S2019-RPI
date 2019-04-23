@@ -114,7 +114,7 @@ void insert_edges(local_id vert_idx) {
 
   for (unsigned int i = 0; i < v.in_edges.size(); ++i) {
     const in_edge &edge = v.in_edges[i];
-    if (edge.rank_location == mpi_rank && !labels[edge.vert_index].value) {
+    if (edge.rank_location == mpi_rank && labels[edge.vert_index].value != 0) {
       continue; // already has a label, skip it
     }
     if (edge.dest_node_id == labels[vert_idx].prev_node) {
@@ -210,8 +210,10 @@ void *run_algorithm(struct thread_params *params) {
         // if message tag is SINK_FOUND, set do_step_3 and sink_found to true,
         // so thread 0 on this rank will do step 3.
         MPI_Status stat;
+        // decrement running_threads;
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
+        // increment running_threads;
         switch (stat.MPI_TAG) {
         case SET_TO_LABEL:
           // try to set label of "to" node
@@ -236,6 +238,7 @@ void *run_algorithm(struct thread_params *params) {
             continue;
           }
 
+          // TODO: check this, bug found here in handle_incoming_edge
           // find edge for the sender's node, and get the flow through it
           curr_flow = 0;
           for (auto it = vertices[vert_idx].out_edges.begin();
@@ -273,8 +276,13 @@ void *run_algorithm(struct thread_params *params) {
         {
           ScopedLock l(edge_queue.h_lock);
           // wait for the queue to become non-empty
-          while (!edge_queue.pop(entry) && !sink_found)
-            ;
+          while (!edge_queue.pop(entry) && !sink_found) {
+            // send token if we have it and running_threads == 0
+            // our color can only be changed after sending the token (done here)
+            // or by a running thread. If we are here, then we must be the
+            // first running thread.
+          }
+          // increment running_threads?
           // release the lock on edge_queue now, so other threads can get edges
         }
 
@@ -290,6 +298,7 @@ void *run_algorithm(struct thread_params *params) {
         if (bt_idx != (local_id)-1) {
           do_step_3 = true;
         }
+        // decrement running_threads?
       }
     }
 
@@ -478,7 +487,16 @@ local_id handle_incoming_edge(const struct edge_entry &entry) {
   // check if "from" node (which holds the flow) is on another rank
   if (rev_edge.rank_location == mpi_rank) {
     local_id from_id = rev_edge.vert_index;
-    int curr_flow = vertices[from_id].out_edges[to_id].flow;
+    // find matching edge in out_edges
+    int curr_flow = -1;
+    // TODO: looping over all edges will be slow for dense graphs
+    for (auto it = vertices[from_id].out_edges.begin();
+         it != vertices[from_id].out_edges.end(); ++it) {
+      if (it->vert_index == to_id) {
+        curr_flow = it->flow;
+        break;
+      }
+    }
     if (curr_flow <= 0) {
       return -1; // discard edge
     }
