@@ -12,12 +12,32 @@ typedef unsigned long long global_id;
 typedef size_t local_id;
 #define GLOBAL_ID_TYPE MPI_UNSIGNED_LONG_LONG
 
+/**
+ * An edge held in the @c in_edges list of the "to" node.
+ *
+ * If @a rank_location is equal to @c mpi_rank, then @a vert_index is the "from"
+ * node's index in the local @c vertices vector, and @a dest_node_id is its
+ * global ID.
+ *
+ * Otherwise, the "from" node is on another MPI rank, and @a dest_node_id is its
+ * global ID.
+ */
 struct in_edge {
   const global_id dest_node_id;
   const int rank_location;
   const local_id vert_index;
 };
 
+/**
+ * An edge held in the @c out_edges list of the "from" node.
+ *
+ * If @a rank_location is equal to @c mpi_rank, then @a vert_index is the "to"
+ * node's index in the local @c vertices vector, and @a dest_node_id is its
+ * global ID.
+ *
+ * Otherwise, the "to" node is on another MPI rank, and @a dest_node_id is its
+ * global ID.
+ */
 struct out_edge {
   const global_id dest_node_id;
   const int rank_location;
