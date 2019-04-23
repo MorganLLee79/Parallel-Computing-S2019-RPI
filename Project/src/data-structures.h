@@ -27,7 +27,9 @@ struct out_edge {
 };
 
 struct label {
-  global_id previous_node;
+  global_id prev_node;
+  int prev_rank_loc;
+  local_id prev_vert_index;
   int value;
 };
 extern const struct label EMPTY_LABEL;
