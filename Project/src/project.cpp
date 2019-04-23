@@ -11,7 +11,7 @@ using namespace std;
 int mpi_rank;
 int mpi_size;
 /************Zoltan Library Variables **********/
-struct Zoltan_Strcut *zz;
+struct Zoltan_Struct *zz;
 float version;
 /***********************************************/
 
@@ -42,8 +42,16 @@ struct vertex {
 
 // Something to store vertices. array?
 int local_vertex_count;
+vector<vertex> network;
 
 /*********** Zoltan Functions ***************/
+
+// Return the byte size of the object
+int user_return_obj_size(void *data, int num_global_ids,
+                         ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
+                         int *ierr) {
+  return sizeof(vertex); // Accounting for edges?
+}
 
 // query function, returns the number of objects assigned to the processor
 void user_return_num_obj(void *data, int *ierr) {
@@ -122,6 +130,35 @@ void user_geom_multi_fn(void *data, int nge, int nle, int numObj,
   *err = ZOLTAN_OK;
 }
 
+/////////// Zoltan Migration Functions:
+// Copy all needed data for a single object into a communication buffer
+void user_pack(void *data, int num_global_ids, int num_local_ids,
+               ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int destination,
+               int size, char *buf, int *ierr) {
+  // Cast data to vertex pointer type
+  vertex *input_data = (vertex *)data;
+
+  // Create a buffer
+
+  // Send the buffer to the destination part/processor (MPI rank?)
+
+  *err = ZOLTAN_OK;
+}
+
+// Copy all needed data for a single object into the application data structure
+void user_unpack(void *data, int num_global_ids, ZOLTAN_ID_PTR global_id,
+                 int size, char *buf, int *ierr) {
+  // Cast data to vertex pointer type
+  vertex *input_data = (vertex *)data;
+
+  vertex new_vertex;
+  new_vertex.id = (int)global_id;
+
+  // Need to pass in/out_edges, based on communication buffer in user_pack
+
+  *err = ZOLTAN_OK;
+}
+
 /********************************************/
 
 int max_flow(int source_id, int sink_id) { return -1; }
@@ -130,7 +167,7 @@ int max_flow(int source_id, int sink_id) { return -1; }
 int main(int argc, char **argv) {
 
   MPI::Init(argc, argv);
-  mpi_rank = MPI : COMM_WORLD.Get_rank();
+  mpi_rank = MPI::COMM_WORLD.Get_rank();
   mpi_size = MPI::COMM_WORLD.Get_size();
 
   // Zoltan Initialization
@@ -171,12 +208,21 @@ int main(int argc, char **argv) {
                    *&import_processors, *&import_to_parts, &num_exported,
                    &export_global_ids, &export_local_ids, *&export_processors,
                    *&export_to_parts);
-  if (new)
-    perform_data_migration(...);
+  // if (num_changes?)
+  // perform_data_migration(...);
 
-  /*begin alogirhtm?*/
+  /*begin algorithm?*/
+  printf("r%d: imported %d, exported %d\n", mpi_rank, num_imported,
+         num_exported);
+
+  // Temporary testing: distribute and stuff, print w/ rank
 
   /*Begin closing/freeing things*/
+  Zoltan_LB_Free_Part(&import_global_ids, &import_local_ids, &import_processors,
+                      &import_to_parts);
+  Zoltan_LB_Free_Part(&export_global_ids, &export_local_ids, &export_processors,
+                      &export_to_parts);
+
   Zoltan_Destroy(&zz);
   MPI::Finalize();
 
