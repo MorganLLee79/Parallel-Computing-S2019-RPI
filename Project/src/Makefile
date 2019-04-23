@@ -63,8 +63,12 @@ ZOLTAN_CONFIG_INCLUDE=-I$(BLD)/include
 
 CXX=mpic++
 
-CXXFLAGS =$(ID_TYPE_FLAG) $(ZOLTAN_INCLUDE) -I$(BLD)/include    #"Include"/compiler flags (-I)
-LDFLAGS = $(BLD)/libzoltan.a -lm                                #Library (-l or -L stuff)
+CXXFLAGS =$(ID_TYPE_FLAG) $(ZOLTAN_INCLUDE) -I$(BLD)/include -g \
+    -fsanitize=address -fno-omit-frame-pointer
+    #"Include"/compiler flags (-I)
+LDFLAGS = $(BLD)/libzoltan.a -lm \
+    -fsanitize=address -fno-omit-frame-pointer
+    #Library (-l or -L stuff)
 
 # EXAMPLE_NAMES = exampleBLOCK graphHier.cpp
 

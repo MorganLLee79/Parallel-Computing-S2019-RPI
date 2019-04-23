@@ -55,39 +55,18 @@ vector<vertex> network;
 /*********** Zoltan Query Functions ***************/
 
 // query function, returns the number of objects assigned to the processor
-void user_return_num_obj(void *data, int *ierr) {
-  int *result = (int *)data;
-
-  *result = network.size();
+int user_return_num_obj(void *data, int *ierr) {
+  // int *result = (int *)data;
+  // *result = network.size();
 
   *ierr = ZOLTAN_OK;
+  return network.size();
 }
 
 // https://cs.sandia.gov/Zoltan/ug_html/ug_query_lb.html#ZOLTAN_OBJ_LIST_FN
 void user_return_obj_list(void *data, int num_gid_entries, int num_lid_entries,
                           ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids,
                           int wgt_dim, float *obj_wgts, int *ierr) {
-  // wgt_dim and obj_wgts are unused, left as default values
-  /*
-    int *result =
-        (int *)data; // TODO set to full data set that is being split up (?)
-
-    // Each global ID is a unsigned long long (2*sizeof(int)), local are ints
-    // (array indices)
-    if (num_gid_entries != 2 TODO verify || num_lid_entries != 1) {
-      *ierr = ZOLTAN_FATAL;
-      return;
-    }
-
-    // ZOLTAN_ID_PTRs are arrays of the partitioned IDs, assigned objects
-
-    // Use LB_Partition to allocate; call once, so after ran it?
-
-    // Global IDs are vertex IDs, local IDs are array indices
-    // TODO check, update all edges to have correct allocated ranks in them
-
-    *result = local_vertex_count; */
-
   int i;
   for (i = 0; i < network.size(); ++i) {
     global_ids[i * num_gid_entries] = network[i].id;
@@ -97,37 +76,40 @@ void user_return_obj_list(void *data, int num_gid_entries, int num_lid_entries,
   *ierr = ZOLTAN_OK;
 }
 
-// // Copied from PDF, temporary
-// /* Return coordinates for objects requested by Zoltan in globalIDs array. */
-// void user_geom_multi_fn(void *data, int nge, int nle, int numObj,
-//                         ZOLTAN_ID_PTR globalIDs, ZOLTAN_ID_PTR localIDs,
-//                         int dim, double *geomVec, int *err) {
-//   /* Cast data pointer provided in Zoltan_Set_Fn to application data type. */
-//   /* Application data is an array of Particle structures. */
-//   struct Particle *user_particles = (struct Particle *)data; // Source data
+/////////// Zoltan Graph Query Functions
 
-//   /* Assume for this example that each globalID and localID is one integer.
-//   */
-//   /* Each globalID is a global particle number; each localID is an index */
-//    into the user’s array of Particles.
-//   if (nge != 1 || nle != 1) {
-//     *err = ZOLTAN_FATAL;
-//     return;
-//   }
-//   /* Loop over objects for which coordinates are requested */
-//   int i, j = 0;
-//   for (i = 0; i < numObj; i++) { // Iterate over localIDs, things we have
-//     /* Copy the coordinates for the object globalID[i] (with localID[i]) */
-//     /* into the geomVec vector. Note that Zoltan allocates geomVec. */
-//     // geomVec being set: output?; using data, data=input?
-//     geomVec[j++] = user_particles[localIDs[i]].x;
-//     if (dim > 1)
-//       geomVec[j++] = user_particles[localIDs[i]].y;
-//     if (dim > 2)
-//       geomVec[j++] = user_particles[localIDs[i]].z;
-//   }
-//   *err = ZOLTAN_OK;
-// }
+// Return the number of edges in the given vertex
+int user_num_edges(void *data, int num_gid_entries, int num_lid_entries,
+                   ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int *ierr) {
+
+  return network[local_id[0]].in_edges.size() +
+         network[local_id[0]].out_edges.size();
+
+  *ierr = ZOLTAN_OK;
+}
+
+// Return list of global ids, processor ids for nodes sharing an edge with the
+// given object
+void user_return_edge_list(void *data, int num_gid_entries, int num_lid_entries,
+                           ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
+                           ZOLTAN_ID_PTR nbor_global_id, int *nbor_procs,
+                           int wgt_dim, float *ewgts, int *ierr) {
+  while () { // go through all neighboring edges
+    nbor_global_id[i] = ;
+    nbor_procs[i] =
+        ; //!!!!. edge.rank_location? double check sent out correctly, where set
+          // Processors and stuff after lb_partition will be made available by
+          // import/export_procs (check == mpi_rank?)
+          // Also, how to get unrelated cut edges'? - need to use naive
+          // solution; make table/map global_id-> rank
+          // List the border nodes, local_id->global mapping?
+          // Possibly 1-rank initial, then export to have all info
+          // (mpi_broadcast map?); array[global_id]=mpi_rank
+          // vector.data? to get raw c array
+  }
+
+  *ierr = ZOLTAN_OK;
+}
 
 /////////// Zoltan Migration Functions:
 // Copy all needed data for a single object into a communication buffer
@@ -136,23 +118,22 @@ void user_return_obj_list(void *data, int num_gid_entries, int num_lid_entries,
 int user_return_obj_size(void *data, int num_global_ids,
                          ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
                          int *ierr) {
-  printf("TEST------\n");
-  vertex *input_vertex = (vertex *)data;
+  // vertex *input_vertex = (vertex *)data;
 
   // Need to get the size for the given object, as not all of them are the same
   // size due to vectors
 
   // sizeof(MyVector) + (sizeof(MyVector[0]) * MyVector.size())
-
-  return sizeof(vertex) + sizeof(in_edge) * input_vertex->in_edges.size() +
-         sizeof(out_edge) * input_vertex->out_edges.size();
+  /*
+    return sizeof(vertex) + sizeof(in_edge) * input_vertex->in_edges.size() +
+           sizeof(out_edge) * input_vertex->out_edges.size();*/
+  return sizeof(struct vertex);
   *ierr = ZOLTAN_OK;
 }
 
 void user_pack(void *data, int num_global_ids, int num_local_ids,
                ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int destination,
                int size, char *buf, int *ierr) {
-  printf("TEST------\n");
   // Cast data to vertex pointer type and create the buffer
   vertex *vertex_buffer = (vertex *)buf;
 
@@ -190,12 +171,11 @@ void user_pack(void *data, int num_global_ids, int num_local_ids,
 // Copy all needed data for a single object into the application data structure
 void user_unpack(void *data, int num_global_ids, ZOLTAN_ID_PTR global_id,
                  int size, char *buf, int *ierr) {
-  printf("TEST------\n");
   // Cast data to vertex pointer type
   vertex *vertex_buffer = (vertex *)buf;
 
   vertex new_vertex;
-  new_vertex.id = (unsigned long long)global_id;
+  new_vertex.id = vertex_buffer->id; //(unsigned long long)global_id;
 
   // Need to pass in/out_edges, based on communication buffer in user_pack
   // Go through all the edges and add them. Vector's copy constructor failed
@@ -244,25 +224,37 @@ int main(int argc, char **argv) {
                 NULL);
   Zoltan_Set_Fn(zz, ZOLTAN_OBJ_LIST_FN_TYPE, (void (*)())user_return_obj_list,
                 NULL);
-  // Pack/unpack for non-automigrate versions
-  // Zoltan_Set_Fn(zz, ZOLTAN_OBJ_SIZE_FN_TYPE, (void
-  // (*)())user_return_obj_size,
-  //               NULL);
-  // Zoltan_Set_Fn(zz, ZOLTAN_PACK_OBJ_FN_TYPE, (void (*)())user_-- --, NULL);
-  // Zoltan_Set_Fn(zz, ZOLTAN_UNPACK_OBJ_FN_TYPE, (void (*)())user_-- ---,
-  // NULL); Zoltan_Set_Fn(zz, ...... _);
+
+  // Graph query functions
+  Zoltan_Set_Fn(zz, ZOLTAN_NUM_EDGES_FN_TYPE, (void (*)())user_num_edges, NULL);
+  // Zoltan_Set_Fn(zz, ZOLTAN_OBJ_LIST_FN_TYPE, (void
+  // (*)())user_return_obj_list, NULL);
+
+  // Pack/unpack for data migration
+  Zoltan_Set_Fn(zz, ZOLTAN_OBJ_SIZE_FN_TYPE, (void (*)())user_return_obj_size,
+                NULL);
+  Zoltan_Set_Fn(zz, ZOLTAN_PACK_OBJ_FN_TYPE, (void (*)())user_pack, NULL);
+  Zoltan_Set_Fn(zz, ZOLTAN_UNPACK_OBJ_FN_TYPE, (void (*)())user_unpack, NULL);
+  // Zoltan_Set_Fn(zz, ...... _);
 
   /* Set Zoltan paramaters. */
   // Zoltan_Set_Param(zz, "DEBUG?", "4?");
   Zoltan_Set_Param(zz, "LB_METHOD", "GRAPH");
   Zoltan_Set_Param(zz, "AUTO_MIGRATE",
                    "TRUE"); // Might need user-guided for edges?
+  Zoltan_Set_Param(zz, "RETURN_LISTS", "PARTS");
 
   // Initialize network
-  for (int i = 0; i < 20; i++) {
+  int testing_limit = 4;
+  for (int i = 0; i < testing_limit; i++) {
     vertex new_vertex;
     new_vertex.id = i;
     network.push_back(new_vertex);
+  }
+
+  printf("r%d: checking all values are there\n;", mpi_rank);
+  for (int i = 0; i < testing_limit; i++) {
+    printf("r%d: vertex %d = id %llu\n", mpi_rank, i, network[i].id);
   }
 
   // Basing on https://cs.sandia.gov/Zoltan/ug_html/ug_examples_lb.html
@@ -273,7 +265,7 @@ int main(int argc, char **argv) {
   ZOLTAN_ID_PTR import_global_ids, export_global_ids;
   ZOLTAN_ID_PTR import_local_ids, export_local_ids;
   // Parameters essentially: global info(output), import info, export info
-  printf("r%d: Entering lb partition. n=%d\n", mpi_rank, network.size());
+  // printf("r%d: Entering lb partition. n=%d\n", mpi_rank, network.size());
   Zoltan_LB_Partition(zz, &num_changes, &num_gid_entries, &num_lid_entries,
                       &num_imported, &import_global_ids, &import_local_ids,
                       &import_processors, &import_to_parts, &num_exported,
