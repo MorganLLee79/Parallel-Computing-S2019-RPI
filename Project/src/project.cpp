@@ -259,7 +259,7 @@ void *run_algorithm(struct thread_params *params) {
           }
           break;
         case SINK_FOUND:
-          do_step_3 = true;
+          do_step_3 = mpi_size > 1;
           sink_found = true;
           break;
         default:
@@ -309,7 +309,7 @@ void *run_algorithm(struct thread_params *params) {
     // TODO: may need to wait for message to make it all the way around before
     //  starting?
     // start backtracking
-    bool wait_for_sink_found = bt_idx != (local_id)-1;
+    bool wait_for_sink_found = bt_idx != (local_id)-1 && mpi_size > 1;
     bool wait_for_source_found = false;
     while (do_step_3) {
       if (bt_idx != (local_id)-1) {
@@ -349,7 +349,7 @@ void *run_algorithm(struct thread_params *params) {
           // check for source node
           if (bt_idx == l.prev_vert_index && l.prev_node == source_id) {
             // source node was already processed, exit the loop
-            wait_for_source_found = true;
+            wait_for_source_found = mpi_size > 1;
             break;
           }
           // otherwise, keep following back-pointers
@@ -392,8 +392,10 @@ void *run_algorithm(struct thread_params *params) {
     }
 
     // send SOURCE_FOUND message to next rank
-    MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size, SOURCE_FOUND,
-             MPI_COMM_WORLD);
+    if (mpi_size > 1) {
+      MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size,
+               SOURCE_FOUND, MPI_COMM_WORLD);
+    }
 
     // wait to receive the SINK_FOUND and SOURCE_FOUND messages from previous
     // rank if necessary
