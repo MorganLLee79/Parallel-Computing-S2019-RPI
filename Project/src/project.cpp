@@ -187,9 +187,11 @@ void *run_algorithm(struct thread_params *params) {
      * Set to @c (local_id)-1 if the current backtracking node is not on this
      * rank.
      */
-    local_id backtrack_idx = -1;
+    local_id bt_idx = -1;
     /// Only the thread that will handle step 3 sets this flag.
     bool do_step_3 = false;
+    /// Label value of sink node
+    int sink_value = 0;
 
     // all threads must wait until everything is initialized
     barrier.wait();
@@ -220,7 +222,7 @@ void *run_algorithm(struct thread_params *params) {
           if (set_label(msg.senders_node, stat.MPI_SOURCE, -1, vert_idx,
                         msg.label_value)) {
             // found sink!
-            backtrack_idx = vert_idx;
+            bt_idx = vert_idx;
             do_step_3 = true;
             sink_found = true;
           }
@@ -249,7 +251,9 @@ void *run_algorithm(struct thread_params *params) {
           if (set_label(msg.senders_node, stat.MPI_SOURCE, -1, vert_idx,
                         -min(abs(msg.label_value), curr_flow))) {
             // found sink!
-            backtrack_idx = vert_idx;
+            cerr << "Warning: outgoing edge from sink!\n";
+            bt_idx = vert_idx;
+            sink_value = labels[vert_idx].value;
             do_step_3 = true;
             sink_found = true;
           }
@@ -279,11 +283,11 @@ void *run_algorithm(struct thread_params *params) {
 
         // process edge
         if (entry.is_outgoing) {
-          backtrack_idx = handle_outgoing_edge(entry);
+          bt_idx = handle_outgoing_edge(entry);
         } else {
-          backtrack_idx = handle_incoming_edge(entry);
+          bt_idx = handle_incoming_edge(entry);
         }
-        if (backtrack_idx != (local_id)-1) {
+        if (bt_idx != (local_id)-1) {
           do_step_3 = true;
         }
       }
@@ -301,17 +305,111 @@ void *run_algorithm(struct thread_params *params) {
              MPI_COMM_WORLD);
     // TODO: may need to wait for message to make it all the way around before
     //  starting?
+    struct message_data msg = {};
     // start backtracking
-    while (true) {
-      if (backtrack_idx == (local_id)-1) {
-        // wait for incoming messages
-        // if SOURCE_FOUND is received, forward it the next rank and break
-      } else {
+    bool wait_for_sink_found = bt_idx != (local_id)-1;
+    bool wait_for_source_found = false;
+    while (do_step_3) {
+      if (bt_idx != (local_id)-1) {
         // update flow in local nodes
+        struct label &l = labels[bt_idx];
+        // TODO: looping over all edges will be slow for dense graphs
+        if (l.value > 0 && l.prev_rank_loc == mpi_rank) {
+          // bt_idx is a "from" node and previous node is local
+          // let f(y, x) += sink_value
+          for (auto it = vertices[l.prev_vert_index].out_edges.begin();
+               it != vertices[l.prev_vert_index].out_edges.end(); ++it) {
+            if (it->dest_node_id == vertices[bt_idx].id)
+              it->flow += sink_value;
+          }
+        } else if (l.value < 0) {
+          // let f(x, y) -= sink_value
+          for (auto it = vertices[bt_idx].out_edges.begin();
+               it != vertices[bt_idx].out_edges.end(); ++it) {
+            if (it->dest_node_id == l.prev_node)
+              it->flow -= sink_value;
+          }
+        }
+
+        // if the previous node is not on this rank, send the next rank an
+        // UPDATE_FLOW message, then wait for incoming messages
+        if (l.prev_rank_loc != mpi_rank) {
+          // previous node is remote, send an UPDATE_FLOW message
+          msg = {
+              vertices[bt_idx].id, // sender's node
+              l.prev_node,         // receiver's node
+              sink_value,          // label value
+          };
+          MPI_Send(&msg, 1, MPI_MESSAGE_TYPE, l.prev_rank_loc, UPDATE_FLOW,
+                   MPI_COMM_WORLD);
+          bt_idx = -1;
+        } else {
+          // check for source node
+          if (bt_idx == l.prev_vert_index && l.prev_node == source_id) {
+            // source node was already processed, exit the loop
+            wait_for_source_found = true;
+            break;
+          }
+          // otherwise, keep following back-pointers
+          bt_idx = l.prev_vert_index;
+        }
+      } else {
+        // wait for incoming messages
+        msg = {};
+        MPI_Status stat;
+        MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
+                 MPI_COMM_WORLD, &stat);
+        switch (stat.MPI_TAG) {
+        case SINK_FOUND:
+          wait_for_sink_found = false;
+          break;
+        case SOURCE_FOUND:
+          // if SOURCE_FOUND is received, break and forward it the next rank
+          wait_for_source_found = false;
+          do_step_3 = false;
+          break;
+        case UPDATE_FLOW: {
+          // find our local node
+          sink_value = msg.label_value;
+          local_id vert_idx = lookup_global_id(msg.receivers_node);
+          auto it = vertices[vert_idx].out_edges.begin();
+          // find the remote node in the local node's edge list
+          for (; it != vertices[vert_idx].out_edges.end(); ++it) {
+            if (it->dest_node_id == msg.senders_node)
+              it->flow += sink_value;
+          }
+          // if the sender's node is not found in out_edges, then vert_idx must
+          // be the "to" node and we don't need to do anything
+          bt_idx = vert_idx; // continue with the previous node
+        } break;
+        default:
+          cerr << "Error: got invalid tag in step 3: " << stat.MPI_TAG << endl;
+          break;
+        }
       }
     }
 
-    // wait to receive the SINK_FOUND message from `mpi_rank - 1` if necessary
+    // send SOURCE_FOUND message to next rank
+    MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size, SOURCE_FOUND,
+             MPI_COMM_WORLD);
+
+    // wait to receive the SINK_FOUND and SOURCE_FOUND messages from previous
+    // rank if necessary
+    vector<MPI_Request> requests;
+    vector<MPI_Status> statuses;
+    if (wait_for_sink_found) {
+      requests.push_back(MPI_Request());
+      MPI_Irecv(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank - 1 + mpi_size) % mpi_size,
+                SINK_FOUND, MPI_COMM_WORLD, &requests.back());
+      statuses.push_back(MPI_Status());
+    }
+    if (wait_for_source_found) {
+      requests.push_back(MPI_Request());
+      MPI_Irecv(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank - 1 + mpi_size) % mpi_size,
+                SOURCE_FOUND, MPI_COMM_WORLD, &requests.back());
+      statuses.push_back(MPI_Status());
+    }
+    MPI_Waitall(requests.size(), requests.data(), statuses.data());
   }
 
   return NULL;
@@ -385,6 +483,7 @@ local_id handle_incoming_edge(const struct edge_entry &entry) {
 
     // set label and add edges
     if (set_label(vertices[to_id].id, mpi_rank, to_id, from_id, label_val)) {
+      cerr << "Warning: outgoing edge from sink!\n";
       return from_id;
     }
   } else {
