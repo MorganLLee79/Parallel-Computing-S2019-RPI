@@ -43,6 +43,8 @@ struct vertex {
 // Something to store vertices
 // int local_vertex_count; replaced with vector.size()
 vector<vertex> network;
+int test_net2[10];
+int test_net2_count;
 
 // struct network {
 //   vertex vertices[32]; // Temp maximum
@@ -94,18 +96,29 @@ void user_return_edge_list(void *data, int num_gid_entries, int num_lid_entries,
                            ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
                            ZOLTAN_ID_PTR nbor_global_id, int *nbor_procs,
                            int wgt_dim, float *ewgts, int *ierr) {
-  while () { // go through all neighboring edges
-    nbor_global_id[i] = ;
-    nbor_procs[i] =
-        ; //!!!!. edge.rank_location? double check sent out correctly, where set
-          // Processors and stuff after lb_partition will be made available by
-          // import/export_procs (check == mpi_rank?)
-          // Also, how to get unrelated cut edges'? - need to use naive
-          // solution; make table/map global_id-> rank
-          // List the border nodes, local_id->global mapping?
-          // Possibly 1-rank initial, then export to have all info
-          // (mpi_broadcast map?); array[global_id]=mpi_rank
-          // vector.data? to get raw c array
+
+  vertex curr_vertex = network[(unsigned long)local_id];
+
+  // go through all neighboring edges. in then out edges
+  for (int i = 0; i < curr_vertex.in_edges.size(); ++i) {
+    nbor_global_id[i] = curr_vertex.in_edges[i].source_node_id;
+    nbor_procs[i] = curr_vertex.in_edges[i].rank_location;
+    //!!!!. edge.rank_location? double check sent out correctly, where
+    //! set
+    // Processors and stuff after lb_partition will be made available by
+    // import/export_procs (check == mpi_rank?)
+    // Also, how to get unrelated cut edges'? - need to use naive
+    // solution; make table/map global_id-> rank
+    // List the border nodes, local_id->global mapping?
+    // Possibly 1-rank initial, then export to have all info
+    // (mpi_broadcast map?); array[global_id]=mpi_rank
+    // vector.data? to get raw c array
+  }
+
+  int offset = curr_vertex.in_edges.size();
+  for (int i = 0; i < curr_vertex.out_edges.size(); ++i) {
+    nbor_global_id[i + offset] = curr_vertex.out_edges[i].destination_node_id;
+    nbor_procs[i + offset] = curr_vertex.out_edges[i].rank_location;
   }
 
   *ierr = ZOLTAN_OK;
@@ -227,8 +240,8 @@ int main(int argc, char **argv) {
 
   // Graph query functions
   Zoltan_Set_Fn(zz, ZOLTAN_NUM_EDGES_FN_TYPE, (void (*)())user_num_edges, NULL);
-  // Zoltan_Set_Fn(zz, ZOLTAN_OBJ_LIST_FN_TYPE, (void
-  // (*)())user_return_obj_list, NULL);
+  Zoltan_Set_Fn(zz, ZOLTAN_EDGE_LIST_FN_TYPE, (void (*)())user_return_edge_list,
+                NULL);
 
   // Pack/unpack for data migration
   Zoltan_Set_Fn(zz, ZOLTAN_OBJ_SIZE_FN_TYPE, (void (*)())user_return_obj_size,
@@ -245,16 +258,22 @@ int main(int argc, char **argv) {
   Zoltan_Set_Param(zz, "RETURN_LISTS", "PARTS");
 
   // Initialize network
-  int testing_limit = 4;
+  int testing_limit = 0;
+  if (mpi_rank == 0) {
+    testing_limit = 8;
+  }
+  // testing_limit = 4;
+
   for (int i = 0; i < testing_limit; i++) {
     vertex new_vertex;
-    new_vertex.id = i;
+    new_vertex.id = (unsigned long long)i + (mpi_rank * testing_limit);
     network.push_back(new_vertex);
+    test_net2[i] = i;
   }
-
-  printf("r%d: checking all values are there\n;", mpi_rank);
-  for (int i = 0; i < testing_limit; i++) {
-    printf("r%d: vertex %d = id %llu\n", mpi_rank, i, network[i].id);
+  printf("r%d: Initial size=%lu\n", mpi_rank, network.size());
+  for (int i = 0; i < network.size(); i++) {
+    printf("r%d: network[%lu]=%lu; %d\n", mpi_rank, i, network[i].id,
+           test_net2[i]);
   }
 
   // Basing on https://cs.sandia.gov/Zoltan/ug_html/ug_examples_lb.html
@@ -275,8 +294,31 @@ int main(int argc, char **argv) {
 
   /*begin algorithm?*/
 
-  printf("r%d: imported %d, exported %d\n", mpi_rank, num_imported,
-         num_exported);
+  printf("r%d: imported %d, exported %d. num_changes=%d Final size=%lu; g/l id "
+         "entries:%d, %d\n",
+         mpi_rank, num_imported, num_exported, num_changes, network.size(),
+         num_gid_entries, num_lid_entries);
+  for (int i = 0; i < network.size(); i++) {
+
+    if (num_exported == 0) {
+      printf("r%d: network[%lu]=%lu\n", mpi_rank, i, network[i].id);
+    } else {
+      printf("r%d: network[%lu]=%lu; exported to rank %d\n", mpi_rank, i,
+             network[i].id, export_processors[i]);
+    }
+  }
+
+  // Remove own redundant nodes? Would later also process destinations into map
+  // for broadcasting
+  if (num_exported > 0) {
+    for (int i = network.size() - 1; i >= 0; i--) {
+      if (export_processors[i] != mpi_rank) {
+        printf("r%d: removing exported network[%lu]=%lu\n", mpi_rank, i,
+               network[i].id);
+        network.erase(network.begin() + i);
+      }
+    }
+  }
 
   // Temporary testing: distribute and stuff, print w/ rank
 
