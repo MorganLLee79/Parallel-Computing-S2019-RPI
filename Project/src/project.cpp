@@ -127,6 +127,8 @@ void insert_edges(local_id vert_idx) {
         true,     // is_outgoing
         i,        // edge_index
     };
+    cout << "Adding (" << vert_idx << ", " << edge.vert_index
+         << ") to queue (fwd)\n";
     edge_queue.push(temp);
   }
 
@@ -143,6 +145,8 @@ void insert_edges(local_id vert_idx) {
         false,    // is_outgoing
         i,        // edge_index
     };
+    cout << "Adding (" << vert_idx << ", " << edge.vert_index
+         << ") to queue (rev)\n";
     edge_queue.push(temp);
   }
 }
@@ -170,6 +174,23 @@ local_id handle_incoming_edge(const struct edge_entry &entry);
 bool set_label(global_id prev_node, int prev_rank, local_id prev_idx,
                local_id curr_idx, int value);
 
+void dump_labels() {
+  for (local_id i = 0; i < labels.size(); i++) {
+    cout << "Label " << i << ": (" << (ssize_t)labels[i].prev_vert_index << ", "
+         << labels[i].value << ")" << endl;
+  }
+}
+void dump_flows() {
+  for (local_id i = 0; i < vertices.size(); i++) {
+    const auto &edges = vertices[i].out_edges;
+    for (unsigned int j = 0; j < edges.size(); j++) {
+      cout << "Edge (" << i << ", " << edges[j].vert_index
+           << "): " << edges[j].flow << " / " << edges[j].capacity << endl;
+    }
+  }
+}
+
+int pass = 1;
 void *run_algorithm(struct thread_params *params) {
   int tid = params->tid;
   Barrier &barrier = params->barrier;
@@ -197,6 +218,7 @@ void *run_algorithm(struct thread_params *params) {
       edge_entry entry = {};
       while (edge_queue.pop(entry))
         ;
+      cout << "Pass " << pass << ":" << endl;
       // find source node
       local_id i = lookup_global_id(source_id);
       if (i != (local_id)-1) {
@@ -366,6 +388,19 @@ void *run_algorithm(struct thread_params *params) {
 
           __sync_fetch_and_add(&term.working_threads, 1);
           term.queue_is_empty = false;
+          if (!sink_found && entry.is_outgoing) {
+            cout << "Processing (" << entry.vertex_index << ", "
+                 << vertices[entry.vertex_index]
+                        .out_edges[entry.edge_index]
+                        .vert_index
+                 << ") from queue (fwd)" << endl;
+          } else if (!sink_found && !entry.is_outgoing) {
+            cout << "Processing (" << entry.vertex_index << ", "
+                 << vertices[entry.vertex_index]
+                        .in_edges[entry.edge_index]
+                        .vert_index
+                 << ") from queue (rev)" << endl;
+          }
           // release the lock on edge_queue now, so other threads can get edges
         }
 
@@ -394,6 +429,10 @@ void *run_algorithm(struct thread_params *params) {
     if (!do_step_3) {
       continue;
     }
+
+    cout << endl << "After step 2:" << endl;
+    dump_labels();
+
     if (bt_idx != (local_id)-1) {
       sink_value = labels[bt_idx].value;
     }
@@ -508,6 +547,11 @@ void *run_algorithm(struct thread_params *params) {
       statuses.push_back(MPI_Status());
     }
     MPI_Waitall(requests.size(), requests.data(), statuses.data());
+
+    cout << "After step 3:" << endl;
+    dump_flows();
+    cout << endl << endl;
+    pass++;
   }
 
   return NULL;
@@ -689,6 +733,119 @@ int main(int argc, char **argv) {
   // do setup
 
   graph_node_count = 10;
+  num_threads = 2;
+  // Note: The following blocks don't work on the BG/Q, since it can't do
+  //       initializer lists :(
+#ifndef __bgq__
+#define TEST_CASE 1
+#if TEST_CASE == 1
+  // the simplest graph
+  graph_node_count = 4;
+
+  if (mpi_size == 1) {
+    vertices = vector<struct vertex>{
+        {.id = 0, .out_edges = {{1, 0, 1, 2, 0}, {2, 0, 2, 2, 0}}, {}},
+        {.id = 1, .out_edges = {{2, 0, 2, 1, 0}, {3, 0, 3, 2, 0}}, {}},
+        {.id = 2, .out_edges = {{3, 0, 3, 2, 0}}, {}},
+        {.id = 3, .out_edges = {}, {}},
+    };
+  } else if (mpi_size == 2) {
+    if (mpi_rank == 0) {
+      vertices = vector<struct vertex>{
+          {.id = 0,
+           .out_edges = {{1, 1, 0, 2, 0}, {2, 0, 1, 2, 0}},
+           .in_edges = {}},
+          {.id = 2,
+           .out_edges = {{3, 1, 1, 2, 0}},
+           .in_edges = {{0, 0, 0}, {1, 1, 0}}},
+      };
+    } else {
+      vertices = vector<struct vertex>{
+          {.id = 1,
+           .out_edges = {{2, 0, 1, 1, 0}, {3, 1, 1, 2, 0}},
+           .in_edges = {{0, 0, 0}}},
+          {.id = 3, .out_edges = {}, .in_edges = {{1, 1, 0}, {2, 0, 1}}},
+      };
+    }
+  }
+#elif TEST_CASE == 2
+  // slightly more complicated graph
+  graph_node_count = 6;
+
+  vertices = vector<struct vertex>(graph_node_count);
+  vertices[0].id = 0;
+  vertices[0].out_edges = vector<out_edge>{
+      {.dest_node_id = 1,
+       .rank_location = 0,
+       .vert_index = 1,
+       .capacity = 3,
+       .flow = 0},
+      {.dest_node_id = 2,
+       .rank_location = 0,
+       .vert_index = 1,
+       .capacity = 3,
+       .flow = 0},
+  };
+  vertices[1].id = 1;
+  vertices[1].out_edges = vector<out_edge>{
+      {.dest_node_id = 2,
+       .rank_location = 0,
+       .vert_index = 2,
+       .capacity = 2,
+       .flow = 0},
+      {.dest_node_id = 3,
+       .rank_location = 0,
+       .vert_index = 3,
+       .capacity = 3,
+       .flow = 0},
+  };
+  vertices[2].id = 2;
+  vertices[2].out_edges = vector<out_edge>{
+      {.dest_node_id = 4,
+       .rank_location = 0,
+       .vert_index = 4,
+       .capacity = 2,
+       .flow = 0},
+  };
+  vertices[3].id = 3;
+  vertices[3].out_edges = vector<out_edge>{
+      {.dest_node_id = 4,
+       .rank_location = 0,
+       .vert_index = 4,
+       .capacity = 4,
+       .flow = 0},
+      {.dest_node_id = 5,
+       .rank_location = 0,
+       .vert_index = 5,
+       .capacity = 2,
+       .flow = 0},
+  };
+  vertices[4].id = 4;
+  vertices[4].out_edges = vector<out_edge>{
+      {.dest_node_id = 5,
+       .rank_location = 0,
+       .vert_index = 5,
+       .capacity = 3,
+       .flow = 0},
+  };
+  vertices[5].id = 5;
+#endif
+
+  // construct in_edges
+  if (mpi_size == 1) {
+    for (auto v_it = vertices.begin(); v_it != vertices.end(); ++v_it) {
+      for (auto it = v_it->out_edges.begin(); it != v_it->out_edges.end();
+           ++it) {
+        in_edge temp = {
+            v_it->id, // dest_node_id
+            0,        // rank_location
+            v_it->id, // vert_index
+        };
+        vertices[it->vert_index].in_edges.push_back(temp);
+      }
+    }
+  }
+#endif
   source_id = 0;
   sink_id = graph_node_count - 1;
 
