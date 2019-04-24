@@ -7,12 +7,23 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <unordered_map>
 #include <vector>
 
 #include "data-structures.h"
 #include "pthread-wrappers.h"
 
 using namespace std;
+
+#define DEBUG(fmt, args...)                                                    \
+  fprintf(stderr, " DEBUG: %15s():%d R%dT%d: " fmt "\n", __func__, __LINE__,   \
+          mpi_rank, tids.at(pthread_self()), ##args)
+#define ERROR(fmt, args...)                                                    \
+  fprintf(stderr, "*ERROR: %15s():%d R%dT%d: " fmt "\n", __func__, __LINE__,   \
+          mpi_rank, tids.at(pthread_self()), ##args)
+
+/// TID lookup table for debugging
+unordered_map<int, int> tids{};
 
 /************MPI Variables *********************/
 int mpi_rank;
@@ -78,6 +89,8 @@ vector<struct vertex> vertices;
 vector<struct label> labels;
 /// Set to true when the sink node is found in step 2.
 bool sink_found = false;
+/// The thread that should perform step 3 sets this atomically.
+int step_3_tid = -1;
 
 /// Set to true when no valid paths can be found through the graph.
 bool algorithm_complete = false;
@@ -157,7 +170,7 @@ void insert_edges(local_id vert_idx) {
  *
  * @param entry The edge to process.
  */
-local_id handle_outgoing_edge(const struct edge_entry &entry);
+local_id handle_out_edge(const struct edge_entry &entry);
 
 /**
  * Sets @c sink_found and returns the local id of the sink node if it was found;
@@ -165,7 +178,7 @@ local_id handle_outgoing_edge(const struct edge_entry &entry);
  *
  * @param entry The edge to process.
  */
-local_id handle_incoming_edge(const struct edge_entry &entry);
+local_id handle_in_edge(const struct edge_entry &entry);
 
 /**
  * Returns @c true if @p curr_idx is the sink node and we successfully set its
@@ -193,6 +206,7 @@ void dump_flows() {
 int pass = 1;
 void *run_algorithm(struct thread_params *params) {
   int tid = params->tid;
+  tids[pthread_self()] = tid;
   Barrier &barrier = params->barrier;
 
   // TODO: figure out how to detect deadlocks
@@ -207,12 +221,13 @@ void *run_algorithm(struct thread_params *params) {
       // wipe previous labels
       fill(labels.begin(), labels.end(), EMPTY_LABEL);
       // setup globals
-      sink_found = false;
       term.working_threads = 0;
       term.my_color = TOKEN_WHITE;
       term.have_token = mpi_rank == 0;
       term.token_color = TOKEN_WHITE;
       term.queue_is_empty = false;
+      sink_found = false;
+      step_3_tid = -1;
 
       // empty out edge queue
       edge_entry entry = {};
@@ -235,8 +250,6 @@ void *run_algorithm(struct thread_params *params) {
      * rank.
      */
     local_id bt_idx = -1;
-    /// Only the thread that will handle step 3 sets this flag.
-    bool do_step_3 = false;
     /// Label value of sink node
     int sink_value = 0;
 
@@ -273,7 +286,11 @@ void *run_algorithm(struct thread_params *params) {
                         msg.label_value)) {
             // found sink!
             bt_idx = vert_idx;
-            do_step_3 = true;
+            DEBUG("Setting step_3_tid from SET_TO_LABEL...");
+            int old_val = __sync_val_compare_and_swap(&step_3_tid, -1, tid);
+            if (old_val != -1) {
+              ERROR("Thread %d set step_3_tid, but we have bt_idx!", old_val);
+            }
             sink_found = true;
           }
           break;
@@ -286,7 +303,7 @@ void *run_algorithm(struct thread_params *params) {
             continue;
           }
 
-          // TODO: check this, bug found here in handle_incoming_edge
+          // TODO: check this, bug found here in handle_in_edge
           // find edge for the sender's node, and get the flow through it
           curr_flow = 0;
           for (auto it = vertices[vert_idx].out_edges.begin();
@@ -306,12 +323,24 @@ void *run_algorithm(struct thread_params *params) {
             // found sink!
             cerr << "Warning: outgoing edge from sink!\n";
             bt_idx = vert_idx;
-            do_step_3 = true;
+            DEBUG("Setting step_3_tid from COMPUTE_FROM_LABEL...");
+            int old_val = __sync_val_compare_and_swap(&step_3_tid, -1, tid);
+            if (old_val != -1) {
+              ERROR("Thread %d set step_3_tid, but we have bt_idx!", old_val);
+            }
             sink_found = true;
           }
           break;
         case SINK_FOUND:
-          do_step_3 = mpi_size > 1;
+          if (mpi_size > 1) {
+            DEBUG("Setting step_3_tid from SINK_FOUND...");
+            int old_val = __sync_val_compare_and_swap(&step_3_tid, -1, tid);
+            if (old_val == -1) {
+              DEBUG("We will handle step 3");
+            } else {
+              DEBUG("Thread %d is handling step 3", old_val);
+            }
+          }
           sink_found = true;
           break;
         case TOKEN_WHITE:
@@ -330,8 +359,10 @@ void *run_algorithm(struct thread_params *params) {
               MPI_Allreduce(&empty, &result, 1, MPI_INT, MPI_SUM,
                             MPI_COMM_WORLD);
               if (result == 0) {
-                algorithm_complete = true;
+                DEBUG("Algorithm complete!");
                 __sync_fetch_and_sub(&term.working_threads, 1);
+                delete params;
+                algorithm_complete = true;
                 return NULL;
               }
             } else {
@@ -347,8 +378,10 @@ void *run_algorithm(struct thread_params *params) {
           int result = 0;
           MPI_Allreduce(&empty, &result, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
           if (result == 0) {
-            algorithm_complete = true;
+            DEBUG("Algorithm complete!");
             __sync_fetch_and_sub(&term.working_threads, 1);
+            delete params;
+            algorithm_complete = true;
             return NULL;
           }
         } break;
@@ -383,6 +416,8 @@ void *run_algorithm(struct thread_params *params) {
             }
           }
           if (algorithm_complete) {
+            DEBUG("Algorithm complete!");
+            delete params;
             return NULL;
           }
 
@@ -411,40 +446,71 @@ void *run_algorithm(struct thread_params *params) {
 
         // process edge
         if (entry.is_outgoing) {
-          bt_idx = handle_outgoing_edge(entry);
+          bt_idx = handle_out_edge(entry);
         } else {
-          bt_idx = handle_incoming_edge(entry);
+          bt_idx = handle_in_edge(entry);
         }
         if (bt_idx != (local_id)-1) {
-          do_step_3 = true;
+          DEBUG("Found sink node!");
+          DEBUG("Setting step_3_tid from worker thread...");
+          int old_val = __sync_val_compare_and_swap(&step_3_tid, -1, tid);
+          if (old_val != -1) {
+            ERROR("Thread %d set step_3_tid, but we have bt_idx!", old_val);
+          }
+          // tell thread 0 that the sink was found, to make sure it stops before
+          // we start step 3. It will also set sink_found, so the other
+          // worker threads stop too.
+          DEBUG("S2: sending msg SINK_FOUND to R%d (self)", mpi_rank);
+          MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, mpi_rank, SINK_FOUND,
+                   MPI_COMM_WORLD);
+          __sync_fetch_and_sub(&term.working_threads, 1);
+          break;
         }
         __sync_fetch_and_sub(&term.working_threads, 1);
       }
     }
 
+    // make sure all threads finish step 2
+    barrier.wait();
+
     /*--------*
      | Step 3 |
      *--------*/
     // go to the beginning of the loop and wait if not handling step 3.
-    if (!do_step_3) {
+    if (__sync_fetch_and_add(&step_3_tid, 0) != tid) {
+      DEBUG("returning to wait for step 3 to finish");
       continue;
     }
 
     cout << endl << "After step 2:" << endl;
     dump_labels();
 
-    if (bt_idx != (local_id)-1) {
-      sink_value = labels[bt_idx].value;
-    }
     // tell the next rank to stop
     MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size, SINK_FOUND,
              MPI_COMM_WORLD);
-    // TODO: may need to wait for message to make it all the way around before
-    //  starting?
+
+    if (bt_idx != (local_id)-1) {
+      // we found the sink and started step 3
+      sink_value = labels[bt_idx].value;
+      if (mpi_size > 1) {
+        DEBUG("S3: waiting for SINK_FOUND to be returned");
+        MPI_Recv(NULL, 0, MPI_MESSAGE_TYPE,
+                 (mpi_rank - 1 + mpi_size) % mpi_size, SINK_FOUND,
+                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        DEBUG("S3: got SINK_FOUND from %d, starting step 3",
+              (mpi_rank - 1 + mpi_size) % mpi_size);
+      }
+    }
+
+    DEBUG("entering barrier before step 3");
+    MPI_Barrier(MPI_COMM_WORLD);
+    fprintf(stderr, "================== START STEP 3 ==================\n");
+    DEBUG("My bt_idx is %ld", bt_idx);
+
     // start backtracking
-    bool wait_for_sink_found = bt_idx != (local_id)-1 && mpi_size > 1;
     bool wait_for_source_found = false;
-    while (do_step_3) {
+    bool step_3_done = false;
+    while (!step_3_done) {
       if (bt_idx != (local_id)-1) {
         // update flow in local nodes
         struct label &l = labels[bt_idx];
@@ -483,7 +549,8 @@ void *run_algorithm(struct thread_params *params) {
           if (bt_idx == l.prev_vert_index && l.prev_node == source_id) {
             // source node was already processed, exit the loop
             wait_for_source_found = mpi_size > 1;
-            break;
+            step_3_done = true;
+            continue;
           }
           // otherwise, keep following back-pointers
           bt_idx = l.prev_vert_index;
@@ -495,13 +562,10 @@ void *run_algorithm(struct thread_params *params) {
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
         switch (stat.MPI_TAG) {
-        case SINK_FOUND:
-          wait_for_sink_found = false;
-          break;
         case SOURCE_FOUND:
           // if SOURCE_FOUND is received, break and forward it the next rank
           wait_for_source_found = false;
-          do_step_3 = false;
+          step_3_done = true;
           break;
         case UPDATE_FLOW: {
           // find our local node
@@ -530,30 +594,25 @@ void *run_algorithm(struct thread_params *params) {
                SOURCE_FOUND, MPI_COMM_WORLD);
     }
 
-    // wait to receive the SINK_FOUND and SOURCE_FOUND messages from previous
-    // rank if necessary
-    vector<MPI_Request> requests;
-    vector<MPI_Status> statuses;
-    if (wait_for_sink_found) {
-      requests.push_back(MPI_Request());
-      MPI_Irecv(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank - 1 + mpi_size) % mpi_size,
-                SINK_FOUND, MPI_COMM_WORLD, &requests.back());
-      statuses.push_back(MPI_Status());
-    }
+    // wait to receive the SOURCE_FOUND message from previous rank if necessary
     if (wait_for_source_found) {
-      requests.push_back(MPI_Request());
-      MPI_Irecv(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank - 1 + mpi_size) % mpi_size,
-                SOURCE_FOUND, MPI_COMM_WORLD, &requests.back());
-      statuses.push_back(MPI_Status());
+      MPI_Recv(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank - 1 + mpi_size) % mpi_size,
+               SOURCE_FOUND, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      DEBUG("S3: got SOURCE_FOUND from R%d, done with step 3",
+            (mpi_rank - 1 + mpi_size) % mpi_size);
     }
-    MPI_Waitall(requests.size(), requests.data(), statuses.data());
 
-    cout << "After step 3:" << endl;
+    DEBUG("entering barrier after step 3");
+    MPI_Barrier(MPI_COMM_WORLD);
+    fprintf(stderr, "=================== END STEP 3 ===================\n");
+
+    DEBUG("After step 3:");
     dump_flows();
     cout << endl << endl;
     pass++;
   }
 
+  delete params;
   return NULL;
 }
 
@@ -566,8 +625,6 @@ bool set_label(global_id prev_node, int prev_rank, local_id prev_idx,
     labels[curr_idx].prev_rank_loc = prev_rank;
     labels[curr_idx].prev_vert_index = prev_idx;
     if (vertices[curr_idx].id == sink_id) {
-      // set flag
-      sink_found = true;
       return true;
     } else {
       // add edges to queue
@@ -577,7 +634,7 @@ bool set_label(global_id prev_node, int prev_rank, local_id prev_idx,
   return false;
 }
 
-local_id handle_outgoing_edge(const struct edge_entry &entry) {
+local_id handle_out_edge(const struct edge_entry &entry) {
   local_id from_id = entry.vertex_index;
   struct out_edge &edge = vertices[from_id].out_edges[entry.edge_index];
 
@@ -612,7 +669,7 @@ local_id handle_outgoing_edge(const struct edge_entry &entry) {
   return -1;
 }
 
-local_id handle_incoming_edge(const struct edge_entry &entry) {
+local_id handle_in_edge(const struct edge_entry &entry) {
   local_id to_id = entry.vertex_index;
   struct in_edge &rev_edge = vertices[to_id].in_edges[entry.edge_index];
 
