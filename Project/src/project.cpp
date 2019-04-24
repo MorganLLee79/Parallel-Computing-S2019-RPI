@@ -87,6 +87,7 @@ struct termination_info {
 // entries in `vertices` and entries in `labels` must correspond one-to-one
 vector<struct vertex> vertices;
 vector<struct label> labels;
+unordered_map<global_id, local_id> id_lookup{};
 /// Set to true when the sink node is found in step 2.
 bool sink_found = false;
 /// The thread that should perform step 3 sets this atomically.
@@ -109,14 +110,11 @@ struct thread_params {
  * @return The local ID of the given node, or @c (local_id)-1 if not found.
  */
 local_id lookup_global_id(global_id id) {
-  // FIXME: very slow implementation for testing; replace with std::map, at
-  //  least for border nodes.
-  for (local_id i = 0; i < vertices.size(); ++i) {
-    if (vertices[i].id == id) {
-      return i;
-    }
-  }
-  return -1;
+  auto search = id_lookup.find(id);
+
+  if (search == id_lookup.end())
+    return -1;
+  return search->second;
 }
 
 /**
@@ -903,6 +901,10 @@ int main(int argc, char **argv) {
     }
   }
 #endif
+
+  for (local_id i = 0; i < vertices.size(); ++i) {
+    id_lookup[vertices[i].id] = i;
+  }
   source_id = 0;
   sink_id = graph_node_count - 1;
 
