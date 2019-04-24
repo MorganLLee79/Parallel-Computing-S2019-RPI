@@ -187,6 +187,12 @@ void *run_algorithm(struct thread_params *params) {
       fill(labels.begin(), labels.end(), EMPTY_LABEL);
       // setup globals
       sink_found = false;
+      term.working_threads = 0;
+      term.my_color = TOKEN_WHITE;
+      term.have_token = mpi_rank == 0;
+      term.token_color = TOKEN_WHITE;
+      term.queue_is_empty = false;
+
       // empty out edge queue
       edge_entry entry = {};
       while (edge_queue.pop(entry))
@@ -359,6 +365,7 @@ void *run_algorithm(struct thread_params *params) {
           }
 
           __sync_fetch_and_add(&term.working_threads, 1);
+          term.queue_is_empty = false;
           // release the lock on edge_queue now, so other threads can get edges
         }
 
@@ -614,11 +621,6 @@ int calc_max_flow() {
   // initialize vector of labels
   labels = vector<struct label>(vertices.size(), EMPTY_LABEL);
 
-  // termination detection setup
-  if (mpi_rank == 0) {
-    term.have_token = true;
-  }
-
   // spawn threads
   for (size_t i = 0; i < num_threads; i++) {
     auto *params = new struct thread_params(shared_params);
@@ -683,12 +685,6 @@ int main(int argc, char **argv) {
                            &MPI_MESSAGE_TYPE);
     MPI_Type_commit(&MPI_MESSAGE_TYPE);
   }
-
-  term.working_threads = 0;
-  term.my_color = TOKEN_WHITE;
-  term.have_token = mpi_rank == 0;
-  term.token_color = TOKEN_WHITE;
-  term.queue_is_empty = false;
 
   // do setup
 
