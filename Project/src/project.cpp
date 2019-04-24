@@ -44,8 +44,8 @@ struct vertex {
 // Something to store vertices
 // int local_vertex_count; replaced with vector.size()
 vector<vertex> network;
-int test_net2[10];
-int test_net2_count;
+unsigned long long vertex_id_to_ranks[];
+// Indices represent vertex IDs, values represent the rank they're on
 
 // struct network {
 //   vertex vertices[32]; // Temp maximum
@@ -459,22 +459,40 @@ int main(int argc, char **argv) {
   // Process the map of where vertices went and remove exported vertices
   unsigned long long id_rank_map[network.size()];
   if (mpi_rank == 0) {
-    for (int i = network.size() - 1; i >= 0; i--) {
+    vertex_id_to_ranks = export_processors;
+
+    for (int i = network.size() - 1; i >= 0; i--) { // Iterate in reverse
 
       // Map all export_processors to id_rank_map
       // Wait, export_processors already it?
 
-      // Remove from this rank it was exported
+      // Remove from this rank if it was exported
       if (export_processors[i] != mpi_rank) {
         printf("r%d: removing exported network[%lu]=%lu. Was exported to %d\n",
                mpi_rank, i, network[i].id, export_processors[i]);
         network.erase(network.begin() + i);
       }
     }
-  } else {
   }
+  int total_network_size = -1;
+  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Bcast(&total_network_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_WORLD);
+  // Broadcast array of export_processors essentially.
+  // Indices represent vertex IDs, values represent the rank they're on
+  MPI_Bcast(vertex_id_to_ranks, total_network_size, MPI_INT, 0, MPI_COMM_WORLD);
 
-  // Temporary testing: distribute and stuff, print w/ rank
+  // Fill out edges' rank_location values everywhere using vertex_id_to_ranks
+  for (int i = 0; i < network.size(); i++) {
+    for (int j = 0; j < network[i].out_edges.size(); j++) {
+      network[i].out_edges[j].rank_location =
+          vertex_id_to_ranks[network[i].out_edges[j].destination_node_id];
+    }
+    for (int j = 0; j < network[i].in_edges.size(); j++) {
+      network[i].in_edges[j].rank_location =
+          vertex_id_to_ranks[network[i].in_edges[j].source_node_id];
+    }
+  }
 
   MPI_Barrier(MPI_COMM_WORLD);
   /* Set up finished, can begin running */
