@@ -44,6 +44,11 @@ enum message_tags : int {
   /// Sent to rank 0 after the algorithm finishes, contains the flow through
   /// the graph
   TOTAL_FLOW,
+  /// Termination detection tokens
+  TOKEN_WHITE,
+  TOKEN_RED,
+  /// Sent to all ranks by rank 0; should start Allreduce over @c queue_is_empty
+  CHECK_TERMINATION,
 };
 
 /****************** Globals ********************/
@@ -54,6 +59,19 @@ global_id graph_node_count;
 // source and sink ids
 global_id source_id = -1;
 global_id sink_id = -1;
+
+struct termination_info {
+  /// Number of threads currently doing work (not waiting for messages or edges)
+  int working_threads;
+  /// The current color of this rank
+  enum message_tags my_color;
+  /// Whether we currently have the token
+  bool have_token;
+  /// The color of the token, if we have it;
+  enum message_tags token_color;
+  /// Set if a worker thread has found the queue to be empty.
+  bool queue_is_empty;
+} term;
 
 // entries in `vertices` and entries in `labels` must correspond one-to-one
 vector<struct vertex> vertices;
@@ -206,20 +224,21 @@ void *run_algorithm(struct thread_params *params) {
       struct message_data msg = {};
       local_id vert_idx;
       int curr_flow;
+
       while (!sink_found) {
         // if message tag is SINK_FOUND, set do_step_3 and sink_found to true,
         // so thread 0 on this rank will do step 3.
         MPI_Status stat;
-        // decrement running_threads;
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
-        // increment running_threads;
+        __sync_fetch_and_add(&term.working_threads, 1);
         switch (stat.MPI_TAG) {
         case SET_TO_LABEL:
           // try to set label of "to" node
           vert_idx = lookup_global_id(msg.receivers_node);
           if (vert_idx == (local_id)-1) {
             cerr << "Warning: SET_TO_LABEL sent to wrong rank\n";
+            __sync_fetch_and_sub(&term.working_threads, 1);
             continue;
           }
           if (set_label(msg.senders_node, stat.MPI_SOURCE, -1, vert_idx,
@@ -235,6 +254,7 @@ void *run_algorithm(struct thread_params *params) {
           vert_idx = lookup_global_id(msg.receivers_node); // from_id
           if (vert_idx == (local_id)-1) {
             cerr << "Warning: COMPUTE_FROM_LABEL sent to wrong rank\n";
+            __sync_fetch_and_sub(&term.working_threads, 1);
             continue;
           }
 
@@ -248,6 +268,7 @@ void *run_algorithm(struct thread_params *params) {
             }
           }
           if (curr_flow <= 0) {
+            __sync_fetch_and_sub(&term.working_threads, 1);
             continue; // discard edge
           }
 
@@ -265,10 +286,49 @@ void *run_algorithm(struct thread_params *params) {
           do_step_3 = mpi_size > 1;
           sink_found = true;
           break;
+        case TOKEN_WHITE:
+        case TOKEN_RED:
+          term.token_color = (enum message_tags)stat.MPI_TAG;
+          if (mpi_rank == 0) {
+            if (term.token_color == TOKEN_WHITE) {
+              // check termination: send message to all ranks then Allreduce
+              for (int i = 1; i < mpi_size; ++i) {
+                MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, i, CHECK_TERMINATION,
+                         MPI_COMM_WORLD);
+              }
+              // if result is 0, then all queues are empty, and we are done.
+              int empty = term.queue_is_empty ? 0 : 1; // sum should be 0
+              int result = 0;
+              MPI_Allreduce(&empty, &result, 1, MPI_INT, MPI_SUM,
+                            MPI_COMM_WORLD);
+              if (result == 0) {
+                algorithm_complete = true;
+                __sync_fetch_and_sub(&term.working_threads, 1);
+                return NULL;
+              }
+            } else {
+              // reset token color
+              term.token_color = TOKEN_WHITE;
+            }
+          }
+          term.have_token = true;
+          break;
+        case CHECK_TERMINATION: {
+          // if result is 0, then all queues are empty, and we are done.
+          int empty = term.queue_is_empty ? 0 : 1; // sum should be 0
+          int result = 0;
+          MPI_Allreduce(&empty, &result, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+          if (result == 0) {
+            algorithm_complete = true;
+            __sync_fetch_and_sub(&term.working_threads, 1);
+            return NULL;
+          }
+        } break;
         default:
           cerr << "Error: got invalid tag in step 2: " << stat.MPI_TAG << endl;
           break;
         }
+        __sync_fetch_and_sub(&term.working_threads, 1);
       }
     } else {
       struct edge_entry entry = {0, false, 0};
@@ -276,18 +336,36 @@ void *run_algorithm(struct thread_params *params) {
         {
           ScopedLock l(edge_queue.h_lock);
           // wait for the queue to become non-empty
-          while (!edge_queue.pop(entry) && !sink_found) {
-            // send token if we have it and running_threads == 0
-            // our color can only be changed after sending the token (done here)
-            // or by a running thread. If we are here, then we must be the
-            // first running thread.
+          while (!edge_queue.pop(entry) && !sink_found && !algorithm_complete) {
+            // TODO: may need a mutex. Acquire before entering while loop.
+            term.queue_is_empty = true;
+            if (term.have_token && term.working_threads == 0) {
+              // send token
+              // note: our color can only be changed after sending the token
+              // (done here) or by a running thread. If we are here, then we
+              // must be the only running thread.
+              if (term.my_color == TOKEN_RED) {
+                term.token_color = TOKEN_RED;
+              }
+              // send token to next rank
+              term.have_token = false;
+              MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size,
+                       term.token_color, MPI_COMM_WORLD);
+              term.my_color = TOKEN_WHITE;
+            }
           }
-          // increment running_threads?
+          if (algorithm_complete) {
+            return NULL;
+          }
+
+          __sync_fetch_and_add(&term.working_threads, 1);
           // release the lock on edge_queue now, so other threads can get edges
         }
 
-        if (sink_found)
+        if (sink_found) {
+          __sync_fetch_and_sub(&term.working_threads, 1);
           break;
+        }
 
         // process edge
         if (entry.is_outgoing) {
@@ -298,7 +376,7 @@ void *run_algorithm(struct thread_params *params) {
         if (bt_idx != (local_id)-1) {
           do_step_3 = true;
         }
-        // decrement running_threads?
+        __sync_fetch_and_sub(&term.working_threads, 1);
       }
     }
 
@@ -473,7 +551,10 @@ local_id handle_outgoing_edge(const struct edge_entry &entry) {
         edge.dest_node_id,    // receiver's node
         label_val,            // label value
     };
-    // TODO: Make non-blocking somehow? give it to thread 0, maybe?
+    // update this rank's color if necessary
+    if (edge.rank_location < mpi_rank) {
+      term.my_color = TOKEN_RED;
+    }
     MPI_Send(&msg, 1, MPI_MESSAGE_TYPE, edge.rank_location, SET_TO_LABEL,
              MPI_COMM_WORLD);
   }
@@ -515,7 +596,10 @@ local_id handle_incoming_edge(const struct edge_entry &entry) {
         rev_edge.dest_node_id, // receiver's node
         labels[to_id].value,   // label value
     };
-    // TODO: Make non-blocking somehow? give it to thread 0?
+    // update this rank's color if necessary
+    if (rev_edge.rank_location < mpi_rank) {
+      term.my_color = TOKEN_RED;
+    }
     MPI_Send(&msg, 1, MPI_MESSAGE_TYPE, rev_edge.rank_location,
              COMPUTE_FROM_LABEL, MPI_COMM_WORLD);
   }
@@ -528,7 +612,12 @@ int calc_max_flow() {
   struct thread_params shared_params = {-1, barrier};
 
   // initialize vector of labels
-  labels = vector<struct label>(graph_node_count, EMPTY_LABEL);
+  labels = vector<struct label>(vertices.size(), EMPTY_LABEL);
+
+  // termination detection setup
+  if (mpi_rank == 0) {
+    term.have_token = true;
+  }
 
   // spawn threads
   for (size_t i = 0; i < num_threads; i++) {
@@ -558,7 +647,6 @@ int calc_max_flow() {
       MPI_Status stat;
       MPI_Recv(&total_flow, 1, MPI_INT, MPI_ANY_SOURCE, TOTAL_FLOW,
                MPI_COMM_WORLD, &stat);
-      // TODO: check status?
     }
     // otherwise, we have already have the flow
   } else {
@@ -595,6 +683,12 @@ int main(int argc, char **argv) {
                            &MPI_MESSAGE_TYPE);
     MPI_Type_commit(&MPI_MESSAGE_TYPE);
   }
+
+  term.working_threads = 0;
+  term.my_color = TOKEN_WHITE;
+  term.have_token = mpi_rank == 0;
+  term.token_color = TOKEN_WHITE;
+  term.queue_is_empty = false;
 
   // do setup
 
