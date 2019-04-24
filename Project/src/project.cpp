@@ -62,6 +62,18 @@ enum message_tags : int {
   CHECK_TERMINATION,
 };
 
+const unordered_map<int, const char *> tag2str{
+    {SET_TO_LABEL, "SET_TO_LABEL"},
+    {COMPUTE_FROM_LABEL, "COMPUTE_FROM_LABEL"},
+    {SINK_FOUND, "SINK_FOUND"},
+    {UPDATE_FLOW, "UPDATE_FLOW"},
+    {SOURCE_FOUND, "SOURCE_FOUND"},
+    {TOTAL_FLOW, "TOTAL_FLOW"},
+    {TOKEN_WHITE, "TOKEN_WHITE"},
+    {TOKEN_RED, "TOKEN_RED"},
+    {CHECK_TERMINATION, "CHECK_TERMINATION"},
+};
+
 /****************** Globals ********************/
 
 size_t num_threads = 64;
@@ -138,8 +150,7 @@ void insert_edges(local_id vert_idx) {
         true,     // is_outgoing
         i,        // edge_index
     };
-    cout << "Adding (" << vert_idx << ", " << edge.vert_index
-         << ") to queue (fwd)\n";
+    DEBUG("Adding (%llu, %llu) to queue (fwd)", v.id, edge.dest_node_id);
     edge_queue.push(temp);
   }
 
@@ -156,8 +167,7 @@ void insert_edges(local_id vert_idx) {
         false,    // is_outgoing
         i,        // edge_index
     };
-    cout << "Adding (" << vert_idx << ", " << edge.vert_index
-         << ") to queue (rev)\n";
+    DEBUG("Adding (%llu, %llu) to queue (rev)", v.id, edge.dest_node_id);
     edge_queue.push(temp);
   }
 }
@@ -185,21 +195,24 @@ local_id handle_in_edge(const struct edge_entry &entry);
 bool set_label(global_id prev_node, int prev_rank, local_id prev_idx,
                local_id curr_idx, int value);
 
-void dump_labels() {
-  for (local_id i = 0; i < labels.size(); i++) {
-    cout << "Label " << i << ": (" << (ssize_t)labels[i].prev_vert_index << ", "
-         << labels[i].value << ")" << endl;
-  }
-}
-void dump_flows() {
-  for (local_id i = 0; i < vertices.size(); i++) {
-    const auto &edges = vertices[i].out_edges;
-    for (unsigned int j = 0; j < edges.size(); j++) {
-      cout << "Edge (" << i << ", " << edges[j].vert_index
-           << "): " << edges[j].flow << " / " << edges[j].capacity << endl;
-    }
-  }
-}
+// Use macros rather than functions so __func__ isn't modified.
+#define dump_labels()                                                          \
+  do {                                                                         \
+    for (local_id i = 0; i < labels.size(); i++) {                             \
+      DEBUG("Label %llu: (%lld, %d)", vertices[i].id, labels[i].prev_node,     \
+            labels[i].value);                                                  \
+    }                                                                          \
+  } while (0)
+#define dump_flows()                                                           \
+  do {                                                                         \
+    for (local_id i = 0; i < vertices.size(); i++) {                           \
+      const auto &edges = vertices[i].out_edges;                               \
+      for (unsigned int j = 0; j < edges.size(); j++) {                        \
+        DEBUG("Edge (%llu, %llu): %d/%d", vertices[i].id,                      \
+              edges[j].dest_node_id, edges[j].flow, edges[j].capacity);        \
+      }                                                                        \
+    }                                                                          \
+  } while (0)
 
 int pass = 1;
 void *run_algorithm(struct thread_params *params) {
@@ -231,7 +244,7 @@ void *run_algorithm(struct thread_params *params) {
       edge_entry entry = {};
       while (edge_queue.pop(entry))
         ;
-      cout << "Pass " << pass << ":" << endl;
+      DEBUG("Pass %d:", pass);
       // find source node
       local_id i = lookup_global_id(source_id);
       if (i != (local_id)-1) {
@@ -253,6 +266,9 @@ void *run_algorithm(struct thread_params *params) {
 
     // all threads must wait until everything is initialized
     barrier.wait();
+    if (tid == 0) {
+      fprintf(stderr, "------------------ START STEP 2 ------------------\n");
+    }
 
     /*--------*
      | Step 2 |
@@ -271,12 +287,14 @@ void *run_algorithm(struct thread_params *params) {
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
         __sync_fetch_and_add(&term.working_threads, 1);
+        DEBUG("S2: got msg %s from R%d", tag2str.at(stat.MPI_TAG),
+              stat.MPI_SOURCE);
         switch (stat.MPI_TAG) {
         case SET_TO_LABEL:
           // try to set label of "to" node
           vert_idx = lookup_global_id(msg.receivers_node);
           if (vert_idx == (local_id)-1) {
-            cerr << "Warning: SET_TO_LABEL sent to wrong rank\n";
+            ERROR("SET_TO_LABEL sent to wrong rank");
             __sync_fetch_and_sub(&term.working_threads, 1);
             continue;
           }
@@ -296,7 +314,7 @@ void *run_algorithm(struct thread_params *params) {
           // compute and set label of "from" node
           vert_idx = lookup_global_id(msg.receivers_node); // from_id
           if (vert_idx == (local_id)-1) {
-            cerr << "Warning: COMPUTE_FROM_LABEL sent to wrong rank\n";
+            ERROR("COMPUTE_FROM_LABEL sent to wrong rank");
             __sync_fetch_and_sub(&term.working_threads, 1);
             continue;
           }
@@ -319,7 +337,7 @@ void *run_algorithm(struct thread_params *params) {
           if (set_label(msg.senders_node, stat.MPI_SOURCE, -1, vert_idx,
                         -min(abs(msg.label_value), curr_flow))) {
             // found sink!
-            cerr << "Warning: outgoing edge from sink!\n";
+            ERROR("outgoing edge from sink!");
             bt_idx = vert_idx;
             DEBUG("Setting step_3_tid from COMPUTE_FROM_LABEL...");
             int old_val = __sync_val_compare_and_swap(&step_3_tid, -1, tid);
@@ -347,12 +365,14 @@ void *run_algorithm(struct thread_params *params) {
           if (mpi_rank == 0) {
             if (term.token_color == TOKEN_WHITE) {
               // check termination: send message to all ranks then Allreduce
+              DEBUG("S2: got white token, sending CHECK_TERMINATION to all "
+                    "ranks");
               for (int i = 1; i < mpi_size; ++i) {
                 MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, i, CHECK_TERMINATION,
                          MPI_COMM_WORLD);
               }
               // if result is 0, then all queues are empty, and we are done.
-              int empty = term.queue_is_empty ? 0 : 1; // sum should be 0
+              int empty = term.queue_is_empty ? 0 : 1;
               int result = 0;
               MPI_Allreduce(&empty, &result, 1, MPI_INT, MPI_SUM,
                             MPI_COMM_WORLD);
@@ -362,12 +382,15 @@ void *run_algorithm(struct thread_params *params) {
                 delete params;
                 algorithm_complete = true;
                 return NULL;
+              } else {
+                DEBUG("Not all ranks have empty queues, continuing");
               }
             } else {
               // reset token color
               term.token_color = TOKEN_WHITE;
             }
           }
+          DEBUG("S2: we now have the token");
           term.have_token = true;
           break;
         case CHECK_TERMINATION: {
@@ -384,7 +407,7 @@ void *run_algorithm(struct thread_params *params) {
           }
         } break;
         default:
-          cerr << "Error: got invalid tag in step 2: " << stat.MPI_TAG << endl;
+          ERROR("got invalid tag in step 2: %s", tag2str.at(stat.MPI_TAG));
           break;
         }
         __sync_fetch_and_sub(&term.working_threads, 1);
@@ -408,6 +431,9 @@ void *run_algorithm(struct thread_params *params) {
               }
               // send token to next rank
               term.have_token = false;
+              DEBUG("S2: queue empty, sending %s token to R%d",
+                    term.token_color == TOKEN_WHITE ? "white" : "red",
+                    (mpi_rank + 1) % mpi_size);
               MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size,
                        term.token_color, MPI_COMM_WORLD);
               term.my_color = TOKEN_WHITE;
@@ -422,17 +448,15 @@ void *run_algorithm(struct thread_params *params) {
           __sync_fetch_and_add(&term.working_threads, 1);
           term.queue_is_empty = false;
           if (!sink_found && entry.is_outgoing) {
-            cout << "Processing (" << entry.vertex_index << ", "
-                 << vertices[entry.vertex_index]
-                        .out_edges[entry.edge_index]
-                        .vert_index
-                 << ") from queue (fwd)" << endl;
+            DEBUG("Processing (%lu, %lu) from queue (fwd)", entry.vertex_index,
+                  vertices[entry.vertex_index]
+                      .out_edges[entry.edge_index]
+                      .vert_index);
           } else if (!sink_found && !entry.is_outgoing) {
-            cout << "Processing (" << entry.vertex_index << ", "
-                 << vertices[entry.vertex_index]
-                        .in_edges[entry.edge_index]
-                        .vert_index
-                 << ") from queue (rev)" << endl;
+            DEBUG("Processing (%lu, %lu) from queue (rev)", entry.vertex_index,
+                  vertices[entry.vertex_index]
+                      .in_edges[entry.edge_index]
+                      .vert_index);
           }
           // release the lock on edge_queue now, so other threads can get edges
         }
@@ -480,10 +504,12 @@ void *run_algorithm(struct thread_params *params) {
       continue;
     }
 
-    cout << endl << "After step 2:" << endl;
+    fprintf(stderr, "\n");
+    DEBUG("After step 2:");
     dump_labels();
 
     // tell the next rank to stop
+    DEBUG("S3: sending SINK_FOUND to R%d", (mpi_rank + 1) % mpi_size);
     MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size, SINK_FOUND,
              MPI_COMM_WORLD);
 
@@ -512,6 +538,7 @@ void *run_algorithm(struct thread_params *params) {
       if (bt_idx != (local_id)-1) {
         // update flow in local nodes
         struct label &l = labels[bt_idx];
+        DEBUG("S3: processing node %llu", vertices[bt_idx].id);
         // TODO: looping over all edges will be slow for dense graphs
         if (l.value > 0 && l.prev_rank_loc == mpi_rank) {
           // bt_idx is a "from" node and previous node is local
@@ -539,6 +566,7 @@ void *run_algorithm(struct thread_params *params) {
               l.prev_node,         // receiver's node
               sink_value,          // label value
           };
+          DEBUG("S3: sending UPDATE_FLOW to R%d", l.prev_rank_loc);
           MPI_Send(&msg, 1, MPI_MESSAGE_TYPE, l.prev_rank_loc, UPDATE_FLOW,
                    MPI_COMM_WORLD);
           bt_idx = -1;
@@ -559,6 +587,8 @@ void *run_algorithm(struct thread_params *params) {
         MPI_Status stat;
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
+        DEBUG("S3: got msg %s from R%d", tag2str.at(stat.MPI_TAG),
+              stat.MPI_SOURCE);
         switch (stat.MPI_TAG) {
         case SOURCE_FOUND:
           // if SOURCE_FOUND is received, break and forward it the next rank
@@ -579,8 +609,16 @@ void *run_algorithm(struct thread_params *params) {
           // be the "to" node and we don't need to do anything
           bt_idx = vert_idx; // continue with the previous node
         } break;
+        case SET_TO_LABEL:
+        case COMPUTE_FROM_LABEL:
+        case TOKEN_WHITE:
+        case TOKEN_RED:
+          DEBUG("got old message during step 3 with tag %s",
+                tag2str.at(stat.MPI_TAG));
+          break;
         default:
-          cerr << "Error: got invalid tag in step 3: " << stat.MPI_TAG << endl;
+          ERROR("got invalid message during step 3 with tag %s",
+                tag2str.at(stat.MPI_TAG));
           break;
         }
       }
@@ -588,6 +626,7 @@ void *run_algorithm(struct thread_params *params) {
 
     // send SOURCE_FOUND message to next rank
     if (mpi_size > 1) {
+      DEBUG("S3: sending SOURCE_FOUND to R%d", (mpi_rank + 1) % mpi_size);
       MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size,
                SOURCE_FOUND, MPI_COMM_WORLD);
     }
@@ -606,7 +645,7 @@ void *run_algorithm(struct thread_params *params) {
 
     DEBUG("After step 3:");
     dump_flows();
-    cout << endl << endl;
+    fprintf(stderr, "\n");
     pass++;
   }
 
@@ -661,6 +700,7 @@ local_id handle_out_edge(const struct edge_entry &entry) {
     if (edge.rank_location < mpi_rank) {
       term.my_color = TOKEN_RED;
     }
+    DEBUG("S2: sending msg SET_TO_LABEL to R%d", edge.rank_location);
     MPI_Send(&msg, 1, MPI_MESSAGE_TYPE, edge.rank_location, SET_TO_LABEL,
              MPI_COMM_WORLD);
   }
@@ -692,7 +732,7 @@ local_id handle_in_edge(const struct edge_entry &entry) {
 
     // set label and add edges
     if (set_label(vertices[to_id].id, mpi_rank, to_id, from_id, label_val)) {
-      cerr << "Warning: outgoing edge from sink!\n";
+      ERROR("outgoing edge from sink!");
       return from_id;
     }
   } else {
@@ -706,6 +746,7 @@ local_id handle_in_edge(const struct edge_entry &entry) {
     if (rev_edge.rank_location < mpi_rank) {
       term.my_color = TOKEN_RED;
     }
+    DEBUG("S2: sending msg COMPUTE_FROM_LABEL to R%d", rev_edge.rank_location);
     MPI_Send(&msg, 1, MPI_MESSAGE_TYPE, rev_edge.rank_location,
              COMPUTE_FROM_LABEL, MPI_COMM_WORLD);
   }
@@ -731,6 +772,8 @@ int calc_max_flow() {
   for (size_t i = 0; i < num_threads; ++i) {
     pthread_join(threads[i], NULL);
   }
+
+  cerr << "Calculation complete!\n";
 
   // sum up flow out of source node
   local_id src_idx = lookup_global_id(source_id);
