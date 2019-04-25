@@ -1302,7 +1302,17 @@ int main(int argc, char **argv) {
   int max_flow = calc_max_flow();
   if (mpi_rank == 0) {
     cout << "Max flow: " << max_flow << endl;
+  } else {
+    delete[] global_id_to_rank;
   }
+
+  /*Begin closing/freeing things*/
+  Zoltan_LB_Free_Part(&import_global_ids, &import_local_ids, &import_processors,
+                      &import_to_parts);
+  Zoltan_LB_Free_Part(&export_global_ids, &export_local_ids, &export_processors,
+                      &export_to_parts);
+
+  Zoltan_Destroy(&zz);
 
   MPI_Finalize();
   return 0;
