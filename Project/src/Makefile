@@ -63,11 +63,11 @@ ZOLTAN_CONFIG_INCLUDE=-I$(BLD)/include
 
 CXX=mpic++
 
-CXXFLAGS = $(ZOLTAN_INCLUDE) -I$(BLD)/include -g \
-    -fsanitize=address -fno-omit-frame-pointer
+CXXFLAGS = $(ZOLTAN_INCLUDE) -I$(BLD)/include -g
+    #-fsanitize=address -fno-omit-frame-pointer
     #"Include"/compiler flags (-I)
-LDFLAGS = -L$(BLD) -lzoltan -lm -lpthread \
-    -fsanitize=address -fno-omit-frame-pointer \
+LDFLAGS = -L$(BLD) -lzoltan -lm -lpthread
+    #-fsanitize=address -fno-omit-frame-pointer \
     #$(BLD)/libzoltan.a \
     #Library (-l or -L stuff)
 

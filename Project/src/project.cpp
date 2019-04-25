@@ -25,12 +25,17 @@ using namespace std;
 #define GetTimeBase MPI_Wtime
 #endif
 
+#if 0
 #define DEBUG(fmt, args...)                                                    \
   fprintf(stderr, " DEBUG: %15s():%d R%dT%d: " fmt "\n", __func__, __LINE__,   \
           mpi_rank, tids.at(pthread_self()), ##args)
 #define ERROR(fmt, args...)                                                    \
   fprintf(stderr, "*ERROR: %15s():%d R%dT%d: " fmt "\n", __func__, __LINE__,   \
           mpi_rank, tids.at(pthread_self()), ##args)
+#else
+#define DEBUG(fmt, args...)
+#define ERROR(fmt, args...)
+#endif
 
 /// TID lookup table for debugging
 map<int, int> tids;
@@ -442,7 +447,7 @@ void *run_algorithm(struct thread_params *params) {
     // all threads must wait until everything is initialized
     barrier.wait();
     if (tid == 0) {
-      fprintf(stderr, "------------------ START STEP 2 ------------------\n");
+      DEBUG("------------------ START STEP 2 ------------------\n");
     }
 
     /*--------*
@@ -691,7 +696,7 @@ void *run_algorithm(struct thread_params *params) {
       continue;
     }
 
-    fprintf(stderr, "\n");
+    DEBUG("\n");
     DEBUG("After step 2:");
     dump_labels();
 
@@ -729,7 +734,7 @@ void *run_algorithm(struct thread_params *params) {
 
     DEBUG("entering barrier before step 3");
     MPI_Barrier(MPI_COMM_WORLD);
-    fprintf(stderr, "================== START STEP 3 ==================\n");
+    DEBUG("================== START STEP 3 ==================\n");
     DEBUG("My bt_idx is %ld", bt_idx);
 
     // start backtracking
@@ -844,11 +849,11 @@ void *run_algorithm(struct thread_params *params) {
 
     DEBUG("entering barrier after step 3");
     MPI_Barrier(MPI_COMM_WORLD);
-    fprintf(stderr, "=================== END STEP 3 ===================\n");
+    DEBUG("=================== END STEP 3 ===================\n");
 
     DEBUG("After step 3:");
     dump_flows();
-    fprintf(stderr, "\n");
+    DEBUG("\n");
     pass++;
   }
 
@@ -1103,6 +1108,7 @@ int main(int argc, char **argv) {
   Zoltan_Set_Param(zz, "AUTO_MIGRATE",
                    "TRUE"); // Might need user-guided for edges?
   Zoltan_Set_Param(zz, "RETURN_LISTS", "PARTS");
+  Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
 
   // Initialize Network
   // Root rank will handle partitioning, file reading, broadcasting rank map
@@ -1255,7 +1261,7 @@ int main(int argc, char **argv) {
   }
 
   MPI_Bcast(&graph_node_count, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  printf("Ready to partition\n");
+  // printf("Ready to partition\n");
 
   // Basing on https://cs.sandia.gov/Zoltan/ug_html/ug_examples_lb.html
   int num_changes; // Set to 1/True if decomposition was changed
@@ -1274,21 +1280,23 @@ int main(int argc, char **argv) {
   // Also handles data migration as AUTO_MIGRATE was set to true
 
   MPI_Barrier(MPI_COMM_WORLD);
-  printf("r%d: imported %d, exported %d. num_changes=%d Final size=%lu; g/l id "
-         "entries:%d, %d\n",
-         mpi_rank, num_imported, num_exported, num_changes, vertices.size(),
-         num_gid_entries, num_lid_entries);
-  for (local_id i = 0; i < vertices.size(); i++) {
-    if (num_exported == 0) {
-      printf("r%d: vertices[%lu]=%llu. %lu in, %lu out.\n", mpi_rank, i,
-             vertices[i].id, vertices[i].in_edges.size(),
-             vertices[i].out_edges.size());
-    } else {
-      printf("r%d: vertices[%lu]=%llu. %lu in, %lu out; exported to rank %d\n",
-             mpi_rank, i, vertices[i].id, vertices[i].in_edges.size(),
-             vertices[i].out_edges.size(), export_processors[i]);
-    }
-  }
+  // printf("r%d: imported %d, exported %d. num_changes=%d Final size=%lu; g/l
+  // id "
+  //        "entries:%d, %d\n",
+  //        mpi_rank, num_imported, num_exported, num_changes, vertices.size(),
+  //        num_gid_entries, num_lid_entries);
+  // for (local_id i = 0; i < vertices.size(); i++) {
+  //   if (num_exported == 0) {
+  //     printf("r%d: vertices[%lu]=%llu. %lu in, %lu out.\n", mpi_rank, i,
+  //            vertices[i].id, vertices[i].in_edges.size(),
+  //            vertices[i].out_edges.size());
+  //   } else {
+  //     printf("r%d: vertices[%lu]=%llu. %lu in, %lu out; exported to rank
+  //     %d\n",
+  //            mpi_rank, i, vertices[i].id, vertices[i].in_edges.size(),
+  //            vertices[i].out_edges.size(), export_processors[i]);
+  //   }
+  // }
 
   // Process the map of where vertices went and remove exported vertices
   if (mpi_rank == 0) {
@@ -1297,9 +1305,9 @@ int main(int argc, char **argv) {
     for (long long i = vertices.size() - 1; i >= 0; i--) { // Iterate in reverse
       // Remove from this rank if it was exported
       if (export_processors[i] != mpi_rank) {
-        printf("r%d: removing exported network[%lld]=%llu. Was exported to "
-               "%d\n",
-               mpi_rank, i, vertices[i].id, export_processors[i]);
+        // printf(
+        //     "r%d: removing exported network[%lld]=%llu. Was exported to
+        //     %d\n", mpi_rank, i, vertices[i].id, export_processors[i]);
         vertices.erase(vertices.begin() + i);
       }
     }
@@ -1308,17 +1316,17 @@ int main(int argc, char **argv) {
   }
   // MPI_Barrier(MPI_COMM_WORLD);
   // MPI_Bcast(&total_network_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  printf("r%d: Next?\n", mpi_rank);
+  // printf("r%d: Next?\n", mpi_rank);
   // Broadcast array of export_processors essentially.
   // Indices represent vertex IDs, values represent the rank they're on
   MPI_Bcast(global_id_to_rank, graph_node_count, MPI_INT, 0, MPI_COMM_WORLD);
 
   // Print out all contents for testing
-  for (local_id i = 0; i < vertices.size(); i++) {
-    printf("r%d: id=%llu; in_size=%lu, out_size=%lu\n", mpi_rank,
-           vertices[i].id, vertices[i].in_edges.size(),
-           vertices[i].out_edges.size());
-  }
+  // for (local_id i = 0; i < vertices.size(); i++) {
+  //   printf("r%d: id=%llu; in_size=%lu, out_size=%lu\n", mpi_rank,
+  //          vertices[i].id, vertices[i].in_edges.size(),
+  //          vertices[i].out_edges.size());
+  // }
 
   // construct global-to-local ID lookup
   for (local_id i = 0; i < vertices.size(); ++i) {
@@ -1369,7 +1377,7 @@ int main(int argc, char **argv) {
   }
 
   if (mpi_rank == 0) {
-    cout << "Max flow: " << max_flow << endl;
+    cout << "\nMax flow: " << max_flow << endl;
     cout << "Runtime: " << g_time_in_secs << endl;
   } else {
     delete[] global_id_to_rank;
