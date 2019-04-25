@@ -90,7 +90,6 @@ public:
  */
 class ScopedLock {
 private:
-  bool locked;
   Mutex *mtx;
 
 public:
@@ -104,11 +103,6 @@ public:
    * called on this object.
    */
   ~ScopedLock();
-
-  /**
-   * Unlocks the mutex early.
-   */
-  void unlock();
 };
 
 #endif // PARALLEL_PROJECT_PTHREAD_WRAPPERS_H

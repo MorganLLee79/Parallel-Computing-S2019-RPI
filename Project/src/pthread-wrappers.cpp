@@ -25,12 +25,5 @@ void CondVar::notify() { pthread_cond_signal(&cond); }
 void CondVar::notify_all() { pthread_cond_broadcast(&cond); }
 
 // Scoped lock implementation
-ScopedLock::ScopedLock(Mutex &m) : locked(true), mtx(&m) { mtx->lock(); }
-ScopedLock::~ScopedLock() {
-  if (locked)
-    mtx->unlock();
-}
-void ScopedLock::unlock() {
-  mtx->unlock();
-  locked = false;
-}
+ScopedLock::ScopedLock(Mutex &m) : mtx(&m) { mtx->lock(); }
+ScopedLock::~ScopedLock() { mtx->unlock(); }

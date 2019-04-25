@@ -1142,6 +1142,8 @@ int main(int argc, char **argv) {
 
   /* Set Zoltan parameters. */
   Zoltan_Set_Param(zz, "LB_METHOD", "GRAPH");
+  Zoltan_Set_Param(zz, "GRAPH_PACKAGE", "Parmetis");
+  Zoltan_Set_Param(zz, "LB_APPROACH", "PARTITION");
   Zoltan_Set_Param(zz, "AUTO_MIGRATE",
                    "TRUE"); // Might need user-guided for edges?
   Zoltan_Set_Param(zz, "RETURN_LISTS", "PARTS");
@@ -1201,8 +1203,6 @@ int main(int argc, char **argv) {
   } else {
     global_id_to_rank = new int[graph_node_count];
   }
-  // resize capacity of vertices vector to its actual size
-  vertices.shrink_to_fit();
   // MPI_Barrier(MPI_COMM_WORLD);
   // MPI_Bcast(&total_network_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
   // printf("r%d: Next?\n", mpi_rank);
