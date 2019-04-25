@@ -25,17 +25,19 @@
 import numpy as np
 import sys
 
-if len(sys.argv) != 4:
-    print("USAGE: provide 3 parameters: number of vertices, average out degree, capacity limit")
+if len(sys.argv) != 5:
+    print("USAGE: provide 4 parameters: number of vertices, average out degree, capacity limit, output filename")
     exit(0)
-
-
-np.random.seed(914736)
 
 n = int(sys.argv[1])
 avg_out_deg = float(sys.argv[2])
 # Randpm capacities generated in range [1,C]
 C = int(sys.argv[3])
+output_filename = sys.argv[4]
+
+# Generate a seed varies from configuration to configuration, so that not
+#   all graphs end up having a similar structure. Probably isn't actually a big problem.
+np.random.seed(int(4.219 * avg_out_deg * n))
 
 # roughly 2*n edges will be added later, 
 #   so limit how many random edges we make now
@@ -68,9 +70,9 @@ for u in range(0, n-1):
 edges = set(edges)
 
 m = len(edges)
-avg_out_deg = float(m)/float(n)
+actual_avg_out_deg = float(m)/float(n)
 print(f"\nm = {m:d}")
-print(f"average out degree = {avg_out_deg:f}")
+print(f"average out degree = {actual_avg_out_deg:f}")
 
 # Construct adjacency list
 adj_list = [[] for v in range(n)]
@@ -78,7 +80,7 @@ for edge in edges:
     adj_list[edge[0]].append(edge[1])
 
 # Create the graph file
-graph_file = open(f"random-{n:d}-{m:d}-{C:d}-{avg_out_deg:f}.adj", "w")
+graph_file = open(output_filename, "w")
 graph_file.write(f"{n:d} {m:d}\n")
 for u in range(n):
     graph_file.write(" ".join(str(v)+" "+str(np.random.randint(1,C+1)) for v in adj_list[u]) + "\n")
