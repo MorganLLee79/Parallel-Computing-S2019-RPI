@@ -1149,6 +1149,14 @@ int main(int argc, char **argv) {
   Zoltan_Set_Param(zz, "RETURN_LISTS", "PARTS");
   Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
 
+  // Initialize Network
+  // Root rank will handle partitioning, file reading, broadcasting rank map
+
+  // Start recording time base for partitioning
+  if (mpi_rank == 0) {
+    g_start_cycles = GetTimeBase();
+  }
+
   // Basing on https://cs.sandia.gov/Zoltan/ug_html/ug_examples_lb.html
   int num_changes; // Set to 1/True if decomposition was changed
   int num_imported, num_exported, *import_processors, *export_processors;
@@ -1169,6 +1177,7 @@ int main(int argc, char **argv) {
                       &import_to_parts);
 
   MPI_Barrier(MPI_COMM_WORLD);
+
   // printf("r%d: imported %d, exported %d. num_changes=%d Final size=%lu; g/l
   // id "
   //        "entries:%d, %d\n",
@@ -1240,6 +1249,14 @@ int main(int argc, char **argv) {
         it->vert_index = global_to_local[it->dest_node_id];
       }
     }
+  }
+
+  // Stop timer
+  if (mpi_rank == 0) {
+    g_end_cycles = GetTimeBase();
+    g_time_in_secs =
+        ((double)(g_end_cycles - g_start_cycles) / g_processor_frequency);
+    cout << "Partition time: " << g_time_in_secs << endl;
   }
 
   // Other stuff to fill out? TODO check

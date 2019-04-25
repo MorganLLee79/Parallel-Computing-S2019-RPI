@@ -1,0 +1,21 @@
+Testing Plans:
+multiple n: 10, 100, 1000, 10,000 node graphs?
+number ranks/nodes: 1, 4, 16, 32, 64?
+number threads?: 1, 4, 16, 32, 64?
+
+^Initial values, lets see what we get initially after running them
+
+Local run results:
+n, ranks, threads, runtime, partition time
+1000, 16, 10, 8, 49
+1000, 16, 64, 9, 49
+1000, 16, 32, 8, 50
+1000, 16, 16, 8.5, 49
+
+1000, 16, 64, 9.13, 48.9392
+1000, 16, 32, 8.44, 50.2518
+1000, 16, 16, 8.52, 49.0871
+
+1000, 16, 64, 0.88, 4.39
+1000, 16, 32, 0.92, 4.36
+1000, 16, 16, 1.09, 6.79
