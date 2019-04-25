@@ -12,6 +12,7 @@
 
 #include "data-structures.h"
 #include "pthread-wrappers.h"
+#include "zoltan.h"
 
 using namespace std;
 
@@ -74,6 +75,10 @@ const unordered_map<int, const char *> tag2str{
     {CHECK_TERMINATION, "CHECK_TERMINATION"},
 };
 
+/************Zoltan Library Variables **********/
+struct Zoltan_Struct *zz;
+float zoltan_version;
+
 /****************** Globals ********************/
 
 size_t num_threads = 64;
@@ -129,9 +134,147 @@ local_id lookup_global_id(global_id id) {
   return search->second;
 }
 
+/*********** Zoltan Query Functions ***************/
+
+// query function, returns the number of objects assigned to the processor
+int user_return_num_obj(void *data, int *ierr) {
+
+  // printf("RAN num obj\n");
+  // int *result = (int *)data;
+  // *result = network.size();
+
+  *ierr = ZOLTAN_OK;
+  return vertices.size();
+}
+
+// https://cs.sandia.gov/Zoltan/ug_html/ug_query_lb.html#ZOLTAN_OBJ_LIST_FN
+void user_return_obj_list(void *data, int num_gid_entries, int num_lid_entries,
+                          ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids,
+                          int wgt_dim, float *obj_wgts, int *ierr) {
+  // printf("RAN obj list\n");
+  int i;
+  for (i = 0; i < vertices.size(); ++i) {
+    global_ids[i * num_gid_entries] = vertices[i].id;
+    local_ids[i * num_lid_entries] = i;
+  }
+
+  *ierr = ZOLTAN_OK;
+}
+
+/************Zoltan Graph Query Functions**********/
+
+// Return the number of edges in the given vertex
+int user_num_edges(void *data, int num_gid_entries, int num_lid_entries,
+                   ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int *ierr) {
+  printf("RAN num edges on node %d, size of %d+%d=%d\n", local_id[0],
+         vertices[local_id[0]].in_edges.size(),
+         vertices[local_id[0]].out_edges.size(),
+         (vertices[local_id[0]].in_edges.size() +
+          vertices[local_id[0]].out_edges.size()));
+
+  *ierr = ZOLTAN_OK;
+
+  return (vertices[local_id[0]].in_edges.size() +
+          vertices[local_id[0]].out_edges.size());
+}
+
+// Return list of global ids, processor ids for nodes sharing an edge with the
+// given object
+void user_return_edge_list(void *data, int num_gid_entries, int num_lid_entries,
+                           ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
+                           ZOLTAN_ID_PTR nbor_global_id, int *nbor_procs,
+                           int wgt_dim, float *ewgts, int *ierr) {
+  // printf("-------%d, %d-%d; g:%d,l:%d\n", vertices.size(), num_gid_entries,
+  //        num_lid_entries, *global_id, *local_id);
+  vertex curr_vertex = vertices[(unsigned long long)*local_id];
+
+  // printf("step 1\n");
+  // go through all neighboring edges. in then out edges
+  for (int i = 0; i < curr_vertex.in_edges.size(); ++i) {
+    nbor_global_id[i] = curr_vertex.in_edges[i].dest_node_id;
+    nbor_procs[i] = curr_vertex.in_edges[i].rank_location;
+  }
+  // printf("step 2\n");
+
+  int offset = curr_vertex.in_edges.size();
+  for (int i = 0; i < curr_vertex.out_edges.size(); ++i) {
+    nbor_global_id[i + offset] = curr_vertex.out_edges[i].dest_node_id;
+    nbor_procs[i + offset] = curr_vertex.out_edges[i].rank_location;
+  }
+  // printf("step 3\n");
+
+  *ierr = ZOLTAN_OK;
+}
+
+/////////// Zoltan Migration Functions:
+
+struct packed_vert {
+  size_t out_count;
+  size_t in_count;
+  unsigned char data[];
+};
+
+vector<local_id> to_remove;
+
+void user_pack_vertex(void *data, int num_gid_entries, int num_lid_entries,
+                      global_id *global, local_id *local, int dest, int size,
+                      char *buf, int *ierr) {
+  auto *packed = (struct packed_vert *)buf;
+  struct vertex &vert = vertices[*local];
+  size_t out_size = sizeof(struct out_edge[vert.out_edges.size()]);
+  size_t in_size = sizeof(struct in_edge[vert.in_edges.size()]);
+
+  packed->out_count = vert.out_edges.size();
+  packed->in_count = vert.out_edges.size();
+  memcpy(packed->data, vert.out_edges.data(), out_size);
+  memcpy(packed->data + out_size, vert.in_edges.data(), in_size);
+  id_lookup.erase(*global);
+  // add index to a list to remove after migration
+  to_remove.push_back(*local);
+}
+
+void user_unpack_vertex(void *data, int num_gid_entries, global_id *global,
+                        int size, char *bytes, int *ierr) {
+  auto *packed = (struct packed_vert *)bytes;
+  struct out_edge out_temp = {};
+  struct in_edge in_temp = {};
+  struct vertex vert = {*global,
+                        vector<struct out_edge>(packed->out_count, out_temp),
+                        vector<struct in_edge>(packed->in_count, in_temp)};
+  size_t out_size = sizeof(struct out_edge[packed->out_count]);
+  size_t in_size = sizeof(struct in_edge[packed->in_count]);
+  memcpy(vert.out_edges.data(), packed->data, out_size);
+  memcpy(vert.in_edges.data(), packed->data + out_size, in_size);
+
+  // update rank_location of all edges
+  for (auto it = vert.out_edges.begin(); it != vert.out_edges.end(); ++it) {
+    it->rank_location = mpi_rank;
+  }
+  for (auto it = vert.in_edges.begin(); it != vert.in_edges.end(); ++it) {
+    it->rank_location = mpi_rank;
+  }
+
+  local_id idx = vertices.size();
+  vertices.push_back(vert);
+  id_lookup[*global] = idx;
+}
+
+// Copy all needed data for a single object into a communication buffer
+// Return the byte size of the object
+int user_return_obj_size(void *data, int num_global_ids,
+                         ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
+                         int *ierr) {
+
+  return sizeof(struct packed_vert) +
+         sizeof(struct out_edge[vertices[*local_id].out_edges.size()]) +
+         sizeof(struct in_edge[vertices[*local_id].in_edges.size()]);
+}
+
+/************ Zoltan Query Functions End ***************/
+
 /**
- * Inserts edges between @c vertices[vert_idx] and neighboring unlabelled nodes
- * into the edge queue.
+ * Inserts edges between @c vertices[vert_idx] and neighboring unlabelled
+ * nodes into the edge queue.
  *
  * @param vert_idx The local index of a newly labelled node.
  */
@@ -173,16 +316,16 @@ void insert_edges(local_id vert_idx) {
 }
 
 /**
- * Sets @c sink_found and returns the local id of the sink node if it was found;
- * otherwise returns (local_id)-1.
+ * Sets @c sink_found and returns the local id of the sink node if it was
+ * found; otherwise returns (local_id)-1.
  *
  * @param entry The edge to process.
  */
 local_id handle_out_edge(const struct edge_entry &entry);
 
 /**
- * Sets @c sink_found and returns the local id of the sink node if it was found;
- * otherwise returns (local_id)-1.
+ * Sets @c sink_found and returns the local id of the sink node if it was
+ * found; otherwise returns (local_id)-1.
  *
  * @param entry The edge to process.
  */
@@ -458,7 +601,8 @@ void *run_algorithm(struct thread_params *params) {
                       .in_edges[entry.edge_index]
                       .vert_index);
           }
-          // release the lock on edge_queue now, so other threads can get edges
+          // release the lock on edge_queue now, so other threads can get
+          // edges
         }
 
         if (sink_found) {
@@ -479,8 +623,8 @@ void *run_algorithm(struct thread_params *params) {
           if (old_val != -1) {
             ERROR("Thread %d set step_3_tid, but we have bt_idx!", old_val);
           }
-          // tell thread 0 that the sink was found, to make sure it stops before
-          // we start step 3. It will also set sink_found, so the other
+          // tell thread 0 that the sink was found, to make sure it stops
+          // before we start step 3. It will also set sink_found, so the other
           // worker threads stop too.
           DEBUG("S2: sending msg SINK_FOUND to R%d (self)", mpi_rank);
           MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, mpi_rank, SINK_FOUND,
@@ -605,8 +749,8 @@ void *run_algorithm(struct thread_params *params) {
             if (it->dest_node_id == msg.senders_node)
               it->flow += sink_value;
           }
-          // if the sender's node is not found in out_edges, then vert_idx must
-          // be the "to" node and we don't need to do anything
+          // if the sender's node is not found in out_edges, then vert_idx
+          // must be the "to" node and we don't need to do anything
           bt_idx = vert_idx; // continue with the previous node
         } break;
         case SET_TO_LABEL:
@@ -631,7 +775,8 @@ void *run_algorithm(struct thread_params *params) {
                SOURCE_FOUND, MPI_COMM_WORLD);
     }
 
-    // wait to receive the SOURCE_FOUND message from previous rank if necessary
+    // wait to receive the SOURCE_FOUND message from previous rank if
+    // necessary
     if (wait_for_source_found) {
       MPI_Recv(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank - 1 + mpi_size) % mpi_size,
                SOURCE_FOUND, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -803,6 +948,53 @@ int calc_max_flow() {
   return total_flow;
 }
 
+// Read in an adjacency list file into network
+void read_file(string filepath) {
+  ifstream file(filepath);
+
+  // Read first line: number vertices and number edges
+  string line;
+  getline(infile, line);
+  int num_vertices, num_edges;
+  istringstream iss(line);
+  if (!(iss >> num_vertices >> num_edges)) {
+    break;
+  }
+
+  // Initialize all vertices so that their in and out edges can be added to
+  for (int i = 0; i < num_vertices; i++) {
+    vertices.push_back({.id = i,
+                        .out_edges = vector<struct out_edge>,
+                        .in_edges = vector<struct in_edge>})
+  }
+
+  // Read every line
+  int curr_index = 0; // Track the current index
+  while (getline(file, line)) {
+    // Read in every vertex, capacity pair
+    istringstream iss(line);
+    global_id connected_vertex;
+    int capacity;
+    while (iss >> connected_vertex >> capacity) {
+      // Create new matching in and out edges
+      vertices[curr_index].out_edges.push_back(
+          {connected_vertex, 0, (local_id)-1, capacity, 0});
+
+      vertices[connected_vertex].in_edges.push_back(
+          {curr_index, 0, (local_id)-1});
+    }
+
+    curr_index += 1;
+  }
+
+  /*vector<struct vertex>{
+            {.id = 1,
+             .out_edges = {{2, 0, 1, 1, 0}, {3, 1, 1, 2, 0}},
+             .in_edges = {{0, 0, 0}}},
+            {.id = 3, .out_edges = {}, .in_edges = {{1, 1, 0}, {2, 0, 1}}},
+        }*/
+}
+
 // For now going to assume all ranks will load the entire graph
 int main(int argc, char **argv) {
   int mpi_thread_support;
@@ -828,7 +1020,37 @@ int main(int argc, char **argv) {
     MPI_Type_commit(&MPI_MESSAGE_TYPE);
   }
 
-  // do setup
+  // Zoltan Initialization
+  Zoltan_Initialize(argc, argv, &zoltan_version);
+  zz = Zoltan_Create(MPI_COMM_WORLD);
+
+  /* Register Zoltan's query functions */
+  Zoltan_Set_Fn(zz, ZOLTAN_NUM_OBJ_FN_TYPE, (void (*)())user_return_num_obj,
+                NULL);
+  Zoltan_Set_Fn(zz, ZOLTAN_OBJ_LIST_FN_TYPE, (void (*)())user_return_obj_list,
+                NULL);
+
+  // Graph query functions
+  Zoltan_Set_Fn(zz, ZOLTAN_NUM_EDGES_FN_TYPE, (void (*)())user_num_edges, NULL);
+  Zoltan_Set_Fn(zz, ZOLTAN_EDGE_LIST_FN_TYPE, (void (*)())user_return_edge_list,
+                NULL);
+
+  // Pack/unpack for data migration
+  Zoltan_Set_Fn(zz, ZOLTAN_OBJ_SIZE_FN_TYPE, (void (*)())user_return_obj_size,
+                NULL);
+  Zoltan_Set_Fn(zz, ZOLTAN_PACK_OBJ_FN_TYPE, (void (*)())user_pack_vertex,
+                NULL);
+  Zoltan_Set_Fn(zz, ZOLTAN_UNPACK_OBJ_FN_TYPE, (void (*)())user_unpack_vertex,
+                NULL);
+
+  /* Set Zoltan parameters. */
+  Zoltan_Set_Param(zz, "LB_METHOD", "GRAPH");
+  Zoltan_Set_Param(zz, "AUTO_MIGRATE",
+                   "TRUE"); // Might need user-guided for edges?
+  Zoltan_Set_Param(zz, "RETURN_LISTS", "PARTS");
+
+  // Initialize Network
+  // Root rank will handle partitioning, file reading, broadcasting rank map
 
   graph_node_count = 10;
   num_threads = 2;
