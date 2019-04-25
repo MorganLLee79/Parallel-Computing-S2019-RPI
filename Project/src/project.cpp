@@ -5,6 +5,7 @@
 #include <mpi.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -971,4 +972,61 @@ int main(int argc, char **argv) {
 
   MPI_Finalize();
   return 0;
+}
+
+struct packed_vert {
+  size_t out_count;
+  size_t in_count;
+  unsigned char data[];
+};
+
+int vertex_size(local_id idx) {
+  return sizeof(struct packed_vert) +
+         sizeof(struct out_edge[vertices[idx].out_edges.size()]) +
+         sizeof(struct in_edge[vertices[idx].in_edges.size()]);
+}
+
+vector<local_id> to_remove;
+
+void pack_vertex(void *data, int num_gid_entries, int num_lid_entries,
+                 global_id *global, local_id *local, int dest, int size,
+                 char *buf, int *ierr) {
+  auto *packed = (struct packed_vert *)buf;
+  struct vertex &vert = vertices[*local];
+  size_t out_size = sizeof(struct out_edge[vert.out_edges.size()]);
+  size_t in_size = sizeof(struct in_edge[vert.in_edges.size()]);
+
+  packed->out_count = vert.out_edges.size();
+  packed->in_count = vert.out_edges.size();
+  memcpy(packed->data, vert.out_edges.data(), out_size);
+  memcpy(packed->data + out_size, vert.in_edges.data(), in_size);
+  id_lookup.erase(*global);
+  // add index to a list to remove after migration
+  to_remove.push_back(*local);
+}
+
+void unpack_vertex(void *data, int num_gid_entries, global_id *global, int size,
+                   char *bytes, int *ierr) {
+  auto *packed = (struct packed_vert *)bytes;
+  struct out_edge out_temp = {};
+  struct in_edge in_temp = {};
+  struct vertex vert = {*global,
+                        vector<struct out_edge>(packed->out_count, out_temp),
+                        vector<struct in_edge>(packed->in_count, in_temp)};
+  size_t out_size = sizeof(struct out_edge[packed->out_count]);
+  size_t in_size = sizeof(struct in_edge[packed->in_count]);
+  memcpy(vert.out_edges.data(), packed->data, out_size);
+  memcpy(vert.in_edges.data(), packed->data + out_size, in_size);
+
+  // update rank_location of all edges
+  for (auto it = vert.out_edges.begin(); it != vert.out_edges.end(); ++it) {
+    it->rank_location = mpi_rank;
+  }
+  for (auto it = vert.in_edges.begin(); it != vert.in_edges.end(); ++it) {
+    it->rank_location = mpi_rank;
+  }
+
+  local_id idx = vertices.size();
+  vertices.push_back(vert);
+  id_lookup[*global] = idx;
 }

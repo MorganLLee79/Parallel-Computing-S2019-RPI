@@ -23,9 +23,9 @@ typedef size_t local_id;
  * global ID.
  */
 struct in_edge {
-  const global_id dest_node_id;
-  const int rank_location;
-  const local_id vert_index;
+  global_id dest_node_id;
+  int rank_location;
+  local_id vert_index;
 };
 
 /**
@@ -39,10 +39,10 @@ struct in_edge {
  * global ID.
  */
 struct out_edge {
-  const global_id dest_node_id;
-  const int rank_location;
-  const local_id vert_index;
-  const int capacity;
+  global_id dest_node_id;
+  int rank_location;
+  local_id vert_index;
+  int capacity;
   int flow;
 };
 
