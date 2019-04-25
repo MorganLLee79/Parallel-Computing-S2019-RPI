@@ -7,8 +7,8 @@
 BARN=/gpfs/u/barn/PCP8/PCP8lhrr
 SCRATCH=/gpfs/u/scratch/PCP8/PCP8lhrr
 
-srun -N16 --ntasks-per-node=1 --overcommit -o $SCRATCH/project $SCRATCH/TestGraphs/PA.adj 64 > $SCRATCH/16_rank_results/16r-PA.log &
-srun -N16 --ntasks-per-node=1 --overcommit -o $SCRATCH/project $SCRATCH/TestGraphs/TX.adj 64 > $SCRATCH/16_rank_results/16r-TX.log &
-srun -N16 --ntasks-per-node=1 --overcommit -o $SCRATCH/project $SCRATCH/TestGraphs/CA.adj 64 > $SCRATCH/16_rank_results/16r-CA.log &
-srun -N16 --ntasks-per-node=1 --overcommit -o $SCRATCH/project $SCRATCH/TestGraphs/social.adj 64 > $SCRATCH/16_rank_results/16r-social.log &
-srun -N16 --ntasks-per-node=1 --overcommit -o $SCRATCH/project $SCRATCH/TestGraphs/webcrawl.adj 64 > $SCRATCH/16_rank_results/16r-webcrawl.log
+srun -N16 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/PA.adj 64 > $SCRATCH/16_rank_results/16r-PA.log &
+srun -N16 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/TX.adj 64 > $SCRATCH/16_rank_results/16r-TX.log &
+srun -N16 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/CA.adj 64 > $SCRATCH/16_rank_results/16r-CA.log &
+srun -N16 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/social.adj 64 > $SCRATCH/16_rank_results/16r-social.log &
+srun -N16 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/webcrawl.adj 64 > $SCRATCH/16_rank_results/16r-webcrawl.log

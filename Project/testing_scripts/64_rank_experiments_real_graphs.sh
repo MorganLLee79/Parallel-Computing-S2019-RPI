@@ -6,12 +6,12 @@
 #sbatch --partition medium --nodes 128 --time 30 barn/4-5_scripts/2-1-small_experiments.sh
 BARN=/gpfs/u/barn/PCP8/PCP8lhrr
 SCRATCH=/gpfs/u/scratch/PCP8/PCP8lhrr
-srun -N64 --ntasks-per-node=1 --overcommit -o $SCRATCH/project $SCRATCH/TestGraphs/PA.adj 64 > $SCRATCH/64_rank_results/64r-PA.log &
-srun -N64 --ntasks-per-node=1 --overcommit -o $SCRATCH/project $SCRATCH/TestGraphs/TX.adj 64 > $SCRATCH/64_rank_results/64r-TX.log
+srun -N64 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/PA.adj 64 > $SCRATCH/64_rank_results/64r-PA.log &
+srun -N64 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/TX.adj 64 > $SCRATCH/64_rank_results/64r-TX.log
 wait
 
-srun -N64 --ntasks-per-node=1 --overcommit -o $SCRATCH/project $SCRATCH/TestGraphs/CA.adj 64 > $SCRATCH/64_rank_results/64r-CA.log &
-srun -N64 --ntasks-per-node=1 --overcommit -o $SCRATCH/project $SCRATCH/TestGraphs/social.adj 64 > $SCRATCH/64_rank_results/64r-social.log
+srun -N64 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/CA.adj 64 > $SCRATCH/64_rank_results/64r-CA.log &
+srun -N64 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/social.adj 64 > $SCRATCH/64_rank_results/64r-social.log
 wait
 
-srun -N64 --ntasks-per-node=1 --overcommit -o $SCRATCH/project $SCRATCH/TestGraphs/webcrawl.adj 64 > $SCRATCH/64_rank_results/64r-webcrawl.log
+srun -N64 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/webcrawl.adj 64 > $SCRATCH/64_rank_results/64r-webcrawl.log
