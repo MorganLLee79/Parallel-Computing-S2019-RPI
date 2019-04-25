@@ -6,9 +6,9 @@
 #sbatch --partition small --nodes 32 --time 30 barn/4-5_scripts/2-1-small_experiments.sh
 BARN=/gpfs/u/barn/PCP8/PCP8lhrr
 SCRATCH=/gpfs/u/scratch/PCP8/PCP8lhrr
-
-srun -N4 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/PA.adj 64 > $SCRATCH/4_rank_results/4r-PA.log &
-srun -N4 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/TX.adj 64 > $SCRATCH/4_rank_results/4r-TX.log &
-srun -N4 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/CA.adj 64 > $SCRATCH/4_rank_results/4r-CA.log &
-srun -N4 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/social.adj 64 > $SCRATCH/4_rank_results/4r-social.log &
-srun -N4 --ntasks-per-node=1 --overcommit $SCRATCH/project $SCRATCH/TestGraphs/webcrawl.adj 64 > $SCRATCH/4_rank_results/4r-webcrawl.log
+EXECUTABLE=$BARN/project.out
+srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/PA.adj 64 > $SCRATCH/4_rank_results/4r-PA.log &
+srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/TX.adj 64 > $SCRATCH/4_rank_results/4r-TX.log &
+srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/CA.adj 64 > $SCRATCH/4_rank_results/4r-CA.log &
+srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/social.adj 64 > $SCRATCH/4_rank_results/4r-social.log &
+srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/webcrawl.adj 64 > $SCRATCH/4_rank_results/4r-webcrawl.log
