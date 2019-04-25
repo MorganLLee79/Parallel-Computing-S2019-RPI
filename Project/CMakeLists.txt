@@ -12,4 +12,4 @@ add_executable(project.out src/project.cpp src/pthread-wrappers.cpp src/data-str
 
 find_package(MPI REQUIRED)
 find_package(Threads REQUIRED)
-target_link_libraries(project.out Threads::Threads MPI::MPI_CXX)
+target_link_libraries(project.out Threads::Threads MPI::MPI_CXX -lzoltan)

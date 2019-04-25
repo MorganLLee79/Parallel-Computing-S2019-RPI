@@ -9,8 +9,8 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
-#include <sstream>
 #include <map>
+#include <sstream>
 #include <vector>
 #include <zoltan.h>
 
@@ -120,7 +120,7 @@ struct termination_info {
 // entries in `vertices` and entries in `labels` must correspond one-to-one
 vector<struct vertex> vertices;
 vector<struct label> labels;
-map<global_id, local_id> id_lookup;
+map<global_id, local_id> global_to_local;
 int *vertex_id_to_ranks;
 /// Set to true when the sink node is found in step 2.
 bool sink_found = false;
@@ -144,9 +144,9 @@ struct thread_params {
  * @return The local ID of the given node, or @c (local_id)-1 if not found.
  */
 local_id lookup_global_id(global_id id) {
-  auto search = id_lookup.find(id);
+  auto search = global_to_local.find(id);
 
-  if (search == id_lookup.end())
+  if (search == global_to_local.end())
     return -1;
   return search->second;
 }
@@ -169,8 +169,7 @@ void user_return_obj_list(void *data, int num_gid_entries, int num_lid_entries,
                           ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids,
                           int wgt_dim, float *obj_wgts, int *ierr) {
   // printf("RAN obj list\n");
-  int i;
-  for (i = 0; i < vertices.size(); ++i) {
+  for (local_id i = 0; i < vertices.size(); ++i) {
     global_ids[i * num_gid_entries] = vertices[i].id;
     local_ids[i * num_lid_entries] = i;
   }
@@ -207,14 +206,14 @@ void user_return_edge_list(void *data, int num_gid_entries, int num_lid_entries,
 
   // printf("step 1\n");
   // go through all neighboring edges. in then out edges
-  for (int i = 0; i < curr_vertex.in_edges.size(); ++i) {
+  for (size_t i = 0; i < curr_vertex.in_edges.size(); ++i) {
     nbor_global_id[i] = curr_vertex.in_edges[i].dest_node_id;
     nbor_procs[i] = curr_vertex.in_edges[i].rank_location;
   }
   // printf("step 2\n");
 
-  int offset = curr_vertex.in_edges.size();
-  for (int i = 0; i < curr_vertex.out_edges.size(); ++i) {
+  size_t offset = curr_vertex.in_edges.size();
+  for (size_t i = 0; i < curr_vertex.out_edges.size(); ++i) {
     nbor_global_id[i + offset] = curr_vertex.out_edges[i].dest_node_id;
     nbor_procs[i + offset] = curr_vertex.out_edges[i].rank_location;
   }
@@ -245,7 +244,7 @@ void user_pack_vertex(void *data, int num_gid_entries, int num_lid_entries,
   packed->in_count = vert.out_edges.size();
   memcpy(packed->data, vert.out_edges.data(), out_size);
   memcpy(packed->data + out_size, vert.in_edges.data(), in_size);
-  id_lookup.erase(*global);
+  global_to_local.erase(*global);
   // add index to a list to remove after migration
   to_remove.push_back(*local);
 }
@@ -273,7 +272,7 @@ void user_unpack_vertex(void *data, int num_gid_entries, global_id *global,
 
   local_id idx = vertices.size();
   vertices.push_back(vert);
-  id_lookup[*global] = idx;
+  global_to_local[*global] = idx;
 }
 
 // Copy all needed data for a single object into a communication buffer
@@ -973,12 +972,13 @@ int read_file(string filepath) {
   // Read first line: number vertices and number edges
   string line;
   getline(file, line);
-  int num_vertices, num_edges;
+  global_id num_vertices;
+  size_t num_edges;
   istringstream iss(line);
   iss >> num_vertices >> num_edges;
 
   // Initialize all vertices so that their in and out edges can be added to
-  for (int i = 0; i < num_vertices; i++) {
+  for (global_id i = 0; i < num_vertices; i++) {
     vertices.push_back({.id = i, .out_edges = {}, .in_edges = {}});
   }
 
@@ -1061,12 +1061,10 @@ int main(int argc, char **argv) {
   // Initialize Network
   // Root rank will handle partitioning, file reading, broadcasting rank map
 
-  graph_node_count = 10;
   num_threads = 2;
+#if !defined(__bgq__) && defined(TEST_CASE)
   // Note: The following blocks don't work on the BG/Q, since it can't do
   //       initializer lists :(
-#ifndef __bgq__
-#define TEST_CASE 1
 #if TEST_CASE == 1
   // the simplest graph
   graph_node_count = 4;
@@ -1184,13 +1182,31 @@ int main(int argc, char **argv) {
       };
     }
   }
-#elif TEST_CASE == 3
+#endif
+
+  // construct in_edges
+  if (mpi_size == 1) {
+    for (auto v_it = vertices.begin(); v_it != vertices.end(); ++v_it) {
+      for (auto it = v_it->out_edges.begin(); it != v_it->out_edges.end();
+           ++it) {
+        in_edge temp = {
+            v_it->id, // dest_node_id
+            0,        // rank_location
+            v_it->id, // vert_index
+        };
+        vertices[it->vert_index].in_edges.push_back(temp);
+      }
+    }
+  }
+#else // read from file
   if (mpi_rank == 0 && argc == 2) {
+    printf("Here\n");
     graph_node_count = read_file(argv[1]);
   } else if (mpi_rank == 0 && argc != 2) {
     printf("ERROR: Was expecting mpirun project.out filepath_to_input");
     MPI_Finalize();
   } else {
+    printf("There\n");
     // Nothing for other ranks, wait for partitioning
   }
 
@@ -1237,14 +1253,14 @@ int main(int argc, char **argv) {
   if (mpi_rank == 0) {
     vertex_id_to_ranks = export_processors;
 
-    for (int i = vertices.size() - 1; i >= 0; i--) { // Iterate in reverse
+    for (long long i = vertices.size() - 1; i >= 0; i--) { // Iterate in reverse
 
       // Map all export_processors to id_rank_map
       // Wait, export_processors already it?
 
       // Remove from this rank if it was exported
       if (export_processors[i] != mpi_rank) {
-        printf("r%d: removing exported network[%lu]=%lu. Was exported to% d\n",
+        printf("r%d: removing exported network[%lu]=%lu. Was exported to %d\n",
                mpi_rank, i, vertices[i].id, export_processors[i]);
         vertices.erase(vertices.begin() + i);
       }
@@ -1271,24 +1287,8 @@ int main(int argc, char **argv) {
 
 #endif
 
-  // construct in_edges
-  if (mpi_size == 1) {
-    for (auto v_it = vertices.begin(); v_it != vertices.end(); ++v_it) {
-      for (auto it = v_it->out_edges.begin(); it != v_it->out_edges.end();
-           ++it) {
-        in_edge temp = {
-            v_it->id, // dest_node_id
-            0,        // rank_location
-            v_it->id, // vert_index
-        };
-        vertices[it->vert_index].in_edges.push_back(temp);
-      }
-    }
-  }
-#endif
-
   for (local_id i = 0; i < vertices.size(); ++i) {
-    id_lookup[vertices[i].id] = i;
+    global_to_local[vertices[i].id] = i;
   }
   source_id = 0;
   sink_id = graph_node_count - 1;
