@@ -25,16 +25,43 @@ using namespace std;
 #define GetTimeBase MPI_Wtime
 #endif
 
-#if 0
+#ifdef DEBUG_MODE
 #define DEBUG(fmt, args...)                                                    \
   fprintf(stderr, " DEBUG: %15s():%d R%dT%d: " fmt "\n", __func__, __LINE__,   \
           mpi_rank, tids.at(pthread_self()), ##args)
 #define ERROR(fmt, args...)                                                    \
   fprintf(stderr, "*ERROR: %15s():%d R%dT%d: " fmt "\n", __func__, __LINE__,   \
           mpi_rank, tids.at(pthread_self()), ##args)
+#define dump_labels()                                                          \
+  do {                                                                         \
+    for (local_id i = 0; i < labels.size(); i++) {                             \
+      DEBUG("Label %llu: (%lld, %d)", vertices[i].id, labels[i].prev_node,     \
+            labels[i].value);                                                  \
+    }                                                                          \
+  } while (0)
+#define dump_flows()                                                           \
+  do {                                                                         \
+    for (local_id i = 0; i < vertices.size(); i++) {                           \
+      const auto &edges = vertices[i].out_edges;                               \
+      for (unsigned int j = 0; j < edges.size(); j++) {                        \
+        DEBUG("Edge (%llu, %llu): %d/%d", vertices[i].id,                      \
+              edges[j].dest_node_id, edges[j].flow, edges[j].capacity);        \
+      }                                                                        \
+    }                                                                          \
+  } while (0)
 #else
-#define DEBUG(fmt, args...)
-#define ERROR(fmt, args...)
+#define DEBUG(fmt, args...)                                                    \
+  do {                                                                         \
+  } while (0)
+#define ERROR(fmt, args...)                                                    \
+  do {                                                                         \
+  } while (0)
+#define dump_labels()                                                          \
+  do {                                                                         \
+  } while (0)
+#define dump_flows()                                                           \
+  do {                                                                         \
+  } while (0)
 #endif
 
 /// TID lookup table for debugging
@@ -155,6 +182,8 @@ int *global_id_to_rank;
 bool sink_found = false;
 /// The thread that should perform step 3 sets this atomically.
 int step_3_tid = -1;
+/// The current algorithm iteration count
+int pass = 1;
 
 /// Set to true when no valid paths can be found through the graph.
 bool algorithm_complete = false;
@@ -210,28 +239,26 @@ void user_return_obj_list(void *data, int num_gid_entries, int num_lid_entries,
 
 // Return the number of edges in the given vertex
 int user_num_edges(void *data, int num_gid_entries, int num_lid_entries,
-                   ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int *ierr) {
-  // printf("RAN num edges on node %d, size of %d+%d=%d\n", local_id[0],
-  //        vertices[local_id[0]].in_edges.size(),
-  //        vertices[local_id[0]].out_edges.size(),
-  //        (vertices[local_id[0]].in_edges.size() +
-  //         vertices[local_id[0]].out_edges.size()));
-
+                   ZOLTAN_ID_PTR global, ZOLTAN_ID_PTR local, int *ierr) {
+  // printf("RAN num edges on node %d, size of %d+%d=%d\n", *local,
+  //        vertices[*local].in_edges.size(),
+  //        vertices[*local].out_edges.size(),
+  //        (vertices[*local].in_edges.size() +
+  //         vertices[*local].out_edges.size()));
   *ierr = ZOLTAN_OK;
 
-  return vertices[*local_id].in_edges.size() +
-         vertices[*local_id].out_edges.size();
+  return vertices[*local].in_edges.size() + vertices[*local].out_edges.size();
 }
 
 // Return list of global ids, processor ids for nodes sharing an edge with the
 // given object
 void user_return_edge_list(void *data, int num_gid_entries, int num_lid_entries,
-                           ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
+                           ZOLTAN_ID_PTR global, ZOLTAN_ID_PTR local,
                            ZOLTAN_ID_PTR nbor_global_id, int *nbor_procs,
                            int wgt_dim, float *ewgts, int *ierr) {
   // printf("-------%d, %d-%d; g:%d,l:%d\n", vertices.size(), num_gid_entries,
-  //        num_lid_entries, *global_id, *local_id);
-  const vertex &curr_vertex = vertices[*local_id];
+  //        num_lid_entries, *global, *local);
+  const vertex &curr_vertex = vertices[*local];
 
   // printf("step 1\n");
   // go through all neighboring edges. in then out edges
@@ -260,20 +287,20 @@ struct packed_vert {
 };
 
 void user_pack_vertex(void *data, int num_gid_entries, int num_lid_entries,
-                      global_id *global, local_id *local, int dest, int size,
-                      char *buf, int *ierr) {
+                      ZOLTAN_ID_PTR global, ZOLTAN_ID_PTR local, int dest,
+                      int size, char *buf, int *ierr) {
   auto *packed = (struct packed_vert *)buf;
   struct vertex &vert = vertices[*local];
   packed->out_count = vert.out_edges.size();
   packed->in_count = vert.in_edges.size();
 
-  size_t out_size = sizeof(struct out_edge) * packed->out_count;
-  size_t in_size = sizeof(struct in_edge) * packed->in_count;
+  size_t out_size = sizeof(struct out_edge[packed->out_count]);
+  size_t in_size = sizeof(struct in_edge[packed->in_count]);
   memcpy(packed->data, vert.out_edges.data(), out_size);
   memcpy(packed->data + out_size, vert.in_edges.data(), in_size);
 }
 
-void user_unpack_vertex(void *data, int num_gid_entries, global_id *global,
+void user_unpack_vertex(void *data, int num_gid_entries, ZOLTAN_ID_PTR global,
                         int size, char *bytes, int *ierr) {
   auto *packed = (struct packed_vert *)bytes;
   struct out_edge out_temp = {};
@@ -281,8 +308,8 @@ void user_unpack_vertex(void *data, int num_gid_entries, global_id *global,
   struct vertex vert = {*global,
                         vector<struct out_edge>(packed->out_count, out_temp),
                         vector<struct in_edge>(packed->in_count, in_temp)};
-  size_t out_size = sizeof(struct out_edge) * packed->out_count;
-  size_t in_size = sizeof(struct in_edge) * packed->in_count;
+  size_t out_size = sizeof(struct out_edge[packed->out_count]);
+  size_t in_size = sizeof(struct in_edge[packed->in_count]);
   memcpy(vert.out_edges.data(), packed->data, out_size);
   memcpy(vert.in_edges.data(), packed->data + out_size, in_size);
 
@@ -299,13 +326,12 @@ void user_unpack_vertex(void *data, int num_gid_entries, global_id *global,
 
 // Copy all needed data for a single object into a communication buffer
 // Return the byte size of the object
-int user_return_obj_size(void *data, int num_global_ids,
-                         ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id,
-                         int *ierr) {
+int user_return_obj_size(void *data, int num_global_ids, ZOLTAN_ID_PTR global,
+                         ZOLTAN_ID_PTR local, int *ierr) {
 
   return sizeof(struct packed_vert) +
-         sizeof(struct out_edge) * vertices[*local_id].out_edges.size() +
-         sizeof(struct in_edge) * vertices[*local_id].in_edges.size();
+         sizeof(struct out_edge[vertices[*local].out_edges.size()]) +
+         sizeof(struct in_edge[vertices[*local].in_edges.size()]);
 }
 
 /************ Zoltan Query Functions End ***************/
@@ -376,26 +402,6 @@ local_id handle_in_edge(const struct edge_entry &entry);
 bool set_label(global_id prev_node, int prev_rank, local_id prev_idx,
                local_id curr_idx, int value);
 
-// Use macros rather than functions so __func__ isn't modified.
-#define dump_labels()                                                          \
-  do {                                                                         \
-    for (local_id i = 0; i < labels.size(); i++) {                             \
-      DEBUG("Label %llu: (%lld, %d)", vertices[i].id, labels[i].prev_node,     \
-            labels[i].value);                                                  \
-    }                                                                          \
-  } while (0)
-#define dump_flows()                                                           \
-  do {                                                                         \
-    for (local_id i = 0; i < vertices.size(); i++) {                           \
-      const auto &edges = vertices[i].out_edges;                               \
-      for (unsigned int j = 0; j < edges.size(); j++) {                        \
-        DEBUG("Edge (%llu, %llu): %d/%d", vertices[i].id,                      \
-              edges[j].dest_node_id, edges[j].flow, edges[j].capacity);        \
-      }                                                                        \
-    }                                                                          \
-  } while (0)
-
-int pass = 1;
 void *run_algorithm(struct thread_params *params) {
   int tid = params->tid;
   tids[pthread_self()] = tid;
@@ -447,7 +453,7 @@ void *run_algorithm(struct thread_params *params) {
     // all threads must wait until everything is initialized
     barrier.wait();
     if (tid == 0) {
-      DEBUG("------------------ START STEP 2 ------------------\n");
+      DEBUG("------------------ START STEP 2 ------------------");
     }
 
     /*--------*
@@ -696,7 +702,7 @@ void *run_algorithm(struct thread_params *params) {
       continue;
     }
 
-    DEBUG("\n");
+    DEBUG("");
     DEBUG("After step 2:");
     dump_labels();
 
@@ -734,7 +740,7 @@ void *run_algorithm(struct thread_params *params) {
 
     DEBUG("entering barrier before step 3");
     MPI_Barrier(MPI_COMM_WORLD);
-    DEBUG("================== START STEP 3 ==================\n");
+    DEBUG("================== START STEP 3 ==================");
     DEBUG("My bt_idx is %ld", bt_idx);
 
     // start backtracking
@@ -849,11 +855,11 @@ void *run_algorithm(struct thread_params *params) {
 
     DEBUG("entering barrier after step 3");
     MPI_Barrier(MPI_COMM_WORLD);
-    DEBUG("=================== END STEP 3 ===================\n");
+    DEBUG("=================== END STEP 3 ===================");
 
     DEBUG("After step 3:");
     dump_flows();
-    DEBUG("\n");
+    DEBUG("");
     pass++;
   }
 
@@ -1023,8 +1029,8 @@ int read_file(const string &filepath) {
   getline(file, line);
   global_id num_vertices;
   size_t num_edges;
-  istringstream iss(line);
-  iss >> num_vertices >> num_edges;
+  istringstream iss_(line);
+  iss_ >> num_vertices >> num_edges;
 
   // Initialize all vertices so that their in and out edges can be added to
   struct vertex temp;
@@ -1034,7 +1040,7 @@ int read_file(const string &filepath) {
   }
 
   // Read every line
-  int curr_index = 0; // Track the current index
+  global_id curr_index = 0; // Track the current index
   while (getline(file, line)) {
     // Read in every vertex, capacity pair
     istringstream iss(line);
