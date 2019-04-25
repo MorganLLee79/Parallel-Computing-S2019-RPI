@@ -1020,13 +1020,16 @@ int calc_max_flow() {
 }
 
 // Read in an adjacency list file into network
-// Return the vertex count
-int read_file(const string &filepath) {
+// Return the vertex count, or 0 if there was an error
+global_id read_file(const string &filepath) {
   ifstream file(filepath.c_str());
+  if (!file)
+    return 0;
 
   // Read first line: number vertices and number edges
   string line;
-  getline(file, line);
+  if (!getline(file, line))
+    return 0;
   global_id num_vertices;
   size_t num_edges;
   istringstream iss_(line);
@@ -1086,6 +1089,34 @@ int main(int argc, char **argv) {
     MPI_Type_commit(&MPI_MESSAGE_TYPE);
   }
 
+  // Initialize Network
+  // Root rank will handle partitioning, file reading, broadcasting rank map
+
+  // check arguments
+  if (argc != 3) {
+    if (mpi_rank == 0)
+      cerr << "ERROR: Was expecting " << argv[0]
+           << " filepath_to_input num_threads" << endl;
+    MPI_Finalize();
+    exit(1);
+  }
+  num_threads = atoi(argv[2]);
+  if (mpi_rank == 0) {
+    graph_node_count = read_file(argv[1]);
+    if (graph_node_count == 0)
+      cerr << "Error reading file" << endl;
+  } else {
+    // Nothing for other ranks, wait for partitioning
+  }
+
+  MPI_Bcast(&graph_node_count, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  // printf("Ready to partition\n");
+
+  if (graph_node_count == 0) {
+    MPI_Finalize();
+    exit(2);
+  }
+
   // Zoltan Initialization
   Zoltan_Initialize(argc, argv, &zoltan_version);
   zz = Zoltan_Create(MPI_COMM_WORLD);
@@ -1116,159 +1147,6 @@ int main(int argc, char **argv) {
   Zoltan_Set_Param(zz, "RETURN_LISTS", "PARTS");
   Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
 
-  // Initialize Network
-  // Root rank will handle partitioning, file reading, broadcasting rank map
-
-  num_threads = 10;
-#if !defined(__bgq__) && defined(TEST_CASE)
-  // Note: The following blocks don't work on the BG/Q, since it can't do
-  //       initializer lists :(
-#if TEST_CASE == 1
-  // the simplest graph
-  graph_node_count = 4;
-
-  if (mpi_size == 1) {
-    vertices = vector<struct vertex>{
-        {.id = 0, .out_edges = {{1, 0, 1, 2, 0}, {2, 0, 2, 2, 0}}, {}},
-        {.id = 1, .out_edges = {{2, 0, 2, 1, 0}, {3, 0, 3, 2, 0}}, {}},
-        {.id = 2, .out_edges = {{3, 0, 3, 2, 0}}, {}},
-        {.id = 3, .out_edges = {}, {}},
-    };
-  } else if (mpi_size == 2) {
-    if (mpi_rank == 0) {
-      vertices = vector<struct vertex>{
-          {.id = 0,
-           .out_edges = {{1, 1, 0, 2, 0}, {2, 0, 1, 2, 0}},
-           .in_edges = {}},
-          {.id = 2,
-           .out_edges = {{3, 1, 1, 2, 0}},
-           .in_edges = {{0, 0, 0}, {1, 1, 0}}},
-      };
-    } else {
-      vertices = vector<struct vertex>{
-          {.id = 1,
-           .out_edges = {{2, 0, 1, 1, 0}, {3, 1, 1, 2, 0}},
-           .in_edges = {{0, 0, 0}}},
-          {.id = 3, .out_edges = {}, .in_edges = {{1, 1, 0}, {2, 0, 1}}},
-      };
-    }
-  }
-#elif TEST_CASE == 2
-  // slightly more complicated graph
-  graph_node_count = 6;
-
-  if (mpi_size == 1) {
-    vertices = vector<struct vertex>(graph_node_count);
-    vertices[0].id = 0;
-    vertices[0].out_edges = vector<out_edge>{
-        {.dest_node_id = 1,
-         .rank_location = 0,
-         .vert_index = 1,
-         .capacity = 3,
-         .flow = 0},
-        {.dest_node_id = 2,
-         .rank_location = 0,
-         .vert_index = 1,
-         .capacity = 3,
-         .flow = 0},
-    };
-    vertices[1].id = 1;
-    vertices[1].out_edges = vector<out_edge>{
-        {.dest_node_id = 2,
-         .rank_location = 0,
-         .vert_index = 2,
-         .capacity = 2,
-         .flow = 0},
-        {.dest_node_id = 3,
-         .rank_location = 0,
-         .vert_index = 3,
-         .capacity = 3,
-         .flow = 0},
-    };
-    vertices[2].id = 2;
-    vertices[2].out_edges = vector<out_edge>{
-        {.dest_node_id = 4,
-         .rank_location = 0,
-         .vert_index = 4,
-         .capacity = 2,
-         .flow = 0},
-    };
-    vertices[3].id = 3;
-    vertices[3].out_edges = vector<out_edge>{
-        {.dest_node_id = 4,
-         .rank_location = 0,
-         .vert_index = 4,
-         .capacity = 4,
-         .flow = 0},
-        {.dest_node_id = 5,
-         .rank_location = 0,
-         .vert_index = 5,
-         .capacity = 2,
-         .flow = 0},
-    };
-    vertices[4].id = 4;
-    vertices[4].out_edges = vector<out_edge>{
-        {.dest_node_id = 5,
-         .rank_location = 0,
-         .vert_index = 5,
-         .capacity = 3,
-         .flow = 0},
-    };
-    vertices[5].id = 5;
-  } else if (mpi_size == 2) {
-    if (mpi_rank == 0) {
-      vertices = vector<struct vertex>{
-          {.id = 0,
-           .out_edges = {{1, 0, 1, 3, 0}, {2, 0, 2, 3, 0}},
-           .in_edges = {}},
-          {.id = 1,
-           .out_edges = {{3, 1, (local_id)-1, 3, 0}, {2, 0, 2, 2, 0}},
-           .in_edges = {{0, 0, 0}}},
-          {.id = 2,
-           .out_edges = {{4, 1, (local_id)-1, 2, 0}},
-           .in_edges = {{0, 0, 0}, {1, 0, 1}}},
-      };
-    } else {
-      vertices = vector<struct vertex>{
-          {.id = 3,
-           .out_edges = {{5, 1, 2, 2, 0}, {4, 1, 1, 4, 0}},
-           .in_edges = {{1, 0, (local_id)-1}}},
-          {.id = 4,
-           .out_edges = {{5, 1, 2, 3, 0}},
-           .in_edges = {{2, 0, (local_id)-1}}},
-          {.id = 5, .out_edges = {}, .in_edges = {{3, 1, 0}, {4, 1, 1}}},
-      };
-    }
-  }
-#endif
-
-  // construct in_edges
-  if (mpi_size == 1) {
-    for (auto v_it = vertices.begin(); v_it != vertices.end(); ++v_it) {
-      for (auto it = v_it->out_edges.begin(); it != v_it->out_edges.end();
-           ++it) {
-        in_edge temp = {
-            v_it->id, // dest_node_id
-            0,        // rank_location
-            v_it->id, // vert_index
-        };
-        vertices[it->vert_index].in_edges.push_back(temp);
-      }
-    }
-  }
-#else // read from file
-  if (mpi_rank == 0 && argc == 2) {
-    graph_node_count = read_file(argv[1]);
-  } else if (mpi_rank == 0 && argc != 2) {
-    printf("ERROR: Was expecting mpirun project.out filepath_to_input");
-    MPI_Finalize();
-  } else {
-    // Nothing for other ranks, wait for partitioning
-  }
-
-  MPI_Bcast(&graph_node_count, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  // printf("Ready to partition\n");
-
   // Basing on https://cs.sandia.gov/Zoltan/ug_html/ug_examples_lb.html
   int num_changes; // Set to 1/True if decomposition was changed
   int num_imported, num_exported, *import_processors, *export_processors;
@@ -1284,6 +1162,9 @@ int main(int argc, char **argv) {
                       &export_global_ids, &export_local_ids, &export_processors,
                       &export_to_parts);
   // Also handles data migration as AUTO_MIGRATE was set to true
+  // Don't need this, so go ahead and free it now
+  Zoltan_LB_Free_Part(&import_global_ids, &import_local_ids, &import_processors,
+                      &import_to_parts);
 
   MPI_Barrier(MPI_COMM_WORLD);
   // printf("r%d: imported %d, exported %d. num_changes=%d Final size=%lu; g/l
@@ -1320,6 +1201,8 @@ int main(int argc, char **argv) {
   } else {
     global_id_to_rank = new int[graph_node_count];
   }
+  // resize capacity of vertices vector to its actual size
+  vertices.shrink_to_fit();
   // MPI_Barrier(MPI_COMM_WORLD);
   // MPI_Bcast(&total_network_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
   // printf("r%d: Next?\n", mpi_rank);
@@ -1363,7 +1246,6 @@ int main(int argc, char **argv) {
 
   /* Ready to begin algorithm! */
 
-#endif
   source_id = 0;
   sink_id = graph_node_count - 1;
 
@@ -1390,8 +1272,6 @@ int main(int argc, char **argv) {
   }
 
   /*Begin closing/freeing things*/
-  Zoltan_LB_Free_Part(&import_global_ids, &import_local_ids, &import_processors,
-                      &import_to_parts);
   Zoltan_LB_Free_Part(&export_global_ids, &export_local_ids, &export_processors,
                       &export_to_parts);
 
