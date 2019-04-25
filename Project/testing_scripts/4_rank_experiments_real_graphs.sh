@@ -7,8 +7,8 @@
 BARN=/gpfs/u/barn/PCP8/PCP8lhrr
 SCRATCH=/gpfs/u/scratch/PCP8/PCP8lhrr
 EXECUTABLE=$BARN/project.out
-srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/PA.adj 64 > $SCRATCH/4_rank_results/4r-PA.log &
-srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/TX.adj 64 > $SCRATCH/4_rank_results/4r-TX.log &
-srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/CA.adj 64 > $SCRATCH/4_rank_results/4r-CA.log &
-srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/social.adj 64 > $SCRATCH/4_rank_results/4r-social.log &
-srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/webcrawl.adj 64 > $SCRATCH/4_rank_results/4r-webcrawl.log
+srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/roadnet-PA.adj 64 > $SCRATCH/4_rank_results/4r-PA.log &
+srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/roadnet-TX.adj 64 > $SCRATCH/4_rank_results/4r-TX.log &
+srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/roadnet-CA.adj 64 > $SCRATCH/4_rank_results/4r-CA.log &
+srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/social-slashdot.adj 64 > $SCRATCH/4_rank_results/4r-social.log &
+srun -N4 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/web-google.adj 64 > $SCRATCH/4_rank_results/4r-webcrawl.log

@@ -7,16 +7,16 @@
 BARN=/gpfs/u/barn/PCP8/PCP8lhrr
 SCRATCH=/gpfs/u/scratch/PCP8/PCP8lhrr
 EXECUTABLE=$BARN/project.out
-srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/10000-3.adj 64 > $SCRATCH/16_rank_results/16r-small-3.log &
-srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/10000-6.adj 64 > $SCRATCH/16_rank_results/16r-small-6.log &
-srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/10000-12.adj 64 > $SCRATCH/16_rank_results/16r-small-12.log &
-srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/100000-3.adj 64 > $SCRATCH/16_rank_results/16r-medium-3.log
+srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/small-3.adj 64 > $SCRATCH/16_rank_results/16r-small-3.log &
+srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/small-6.adj 64 > $SCRATCH/16_rank_results/16r-small-6.log &
+srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/small-12.adj 64 > $SCRATCH/16_rank_results/16r-small-12.log &
+srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/medium-3.adj 64 > $SCRATCH/16_rank_results/16r-medium-3.log
 wait
 
-srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/100000-6.adj 64 > $SCRATCH/16_rank_results/16r-medium-6.log &
-srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/100000-12.adj 64 > $SCRATCH/16_rank_results/16r-medium-12.log &
-srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/1000000-3.adj 64 > $SCRATCH/16_rank_results/16r-large-3.log &
-srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/1000000-6.adj 64 > $SCRATCH/16_rank_results/16r-large-6.log
+srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/medium-6.adj 64 > $SCRATCH/16_rank_results/16r-medium-6.log &
+srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/medium-12.adj 64 > $SCRATCH/16_rank_results/16r-medium-12.log &
+srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/large-3.adj 64 > $SCRATCH/16_rank_results/16r-large-3.log &
+srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/large-6.adj 64 > $SCRATCH/16_rank_results/16r-large-6.log
 wait
 
-srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/1000000-12.adj 64 > $SCRATCH/16_rank_results/16r-large-12.log
+srun -N16 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/large-12.adj 64 > $SCRATCH/16_rank_results/16r-large-12.log
