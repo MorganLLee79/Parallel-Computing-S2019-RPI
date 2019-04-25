@@ -29,6 +29,9 @@ if len(sys.argv) != 4:
     print("USAGE: provide 3 parameters: number of vertices, average out degree, capacity limit")
     exit(0)
 
+
+np.random.seed(914736)
+
 n = int(sys.argv[1])
 avg_out_deg = float(sys.argv[2])
 # Randpm capacities generated in range [1,C]
