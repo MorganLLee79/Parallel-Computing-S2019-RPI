@@ -7,7 +7,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
-#include <unordered_map>
+#include <map>
 #include <vector>
 
 #include "data-structures.h"
@@ -23,7 +23,7 @@ using namespace std;
           mpi_rank, tids.at(pthread_self()), ##args)
 
 /// TID lookup table for debugging
-unordered_map<int, int> tids{};
+map<int, int> tids;
 
 /************MPI Variables *********************/
 int mpi_rank;
@@ -62,17 +62,30 @@ enum message_tags : int {
   CHECK_TERMINATION,
 };
 
-const unordered_map<int, const char *> tag2str{
-    {SET_TO_LABEL, "SET_TO_LABEL"},
-    {COMPUTE_FROM_LABEL, "COMPUTE_FROM_LABEL"},
-    {SINK_FOUND, "SINK_FOUND"},
-    {UPDATE_FLOW, "UPDATE_FLOW"},
-    {SOURCE_FOUND, "SOURCE_FOUND"},
-    {TOTAL_FLOW, "TOTAL_FLOW"},
-    {TOKEN_WHITE, "TOKEN_WHITE"},
-    {TOKEN_RED, "TOKEN_RED"},
-    {CHECK_TERMINATION, "CHECK_TERMINATION"},
-};
+const char *tag2str(int tag) {
+  switch (tag) {
+  case SET_TO_LABEL:
+    return "SET_TO_LABEL";
+  case COMPUTE_FROM_LABEL:
+    return "COMPUTE_FROM_LABEL";
+  case SINK_FOUND:
+    return "SINK_FOUND";
+  case UPDATE_FLOW:
+    return "UPDATE_FLOW";
+  case SOURCE_FOUND:
+    return "SOURCE_FOUND";
+  case TOTAL_FLOW:
+    return "TOTAL_FLOW";
+  case TOKEN_WHITE:
+    return "TOKEN_WHITE";
+  case TOKEN_RED:
+    return "TOKEN_RED";
+  case CHECK_TERMINATION:
+    return "CHECK_TERMINATION";
+  default:
+    return "INVALID_TAG";
+  }
+}
 
 /****************** Globals ********************/
 
@@ -99,7 +112,7 @@ struct termination_info {
 // entries in `vertices` and entries in `labels` must correspond one-to-one
 vector<struct vertex> vertices;
 vector<struct label> labels;
-unordered_map<global_id, local_id> id_lookup{};
+map<global_id, local_id> id_lookup;
 /// Set to true when the sink node is found in step 2.
 bool sink_found = false;
 /// The thread that should perform step 3 sets this atomically.
@@ -287,7 +300,7 @@ void *run_algorithm(struct thread_params *params) {
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
         __sync_fetch_and_add(&term.working_threads, 1);
-        DEBUG("S2: got msg %s from R%d", tag2str.at(stat.MPI_TAG),
+        DEBUG("S2: got msg %s from R%d", tag2str(stat.MPI_TAG),
               stat.MPI_SOURCE);
         switch (stat.MPI_TAG) {
         case SET_TO_LABEL:
@@ -407,7 +420,7 @@ void *run_algorithm(struct thread_params *params) {
           }
         } break;
         default:
-          ERROR("got invalid tag in step 2: %s", tag2str.at(stat.MPI_TAG));
+          ERROR("got invalid tag in step 2: %s", tag2str(stat.MPI_TAG));
           break;
         }
         __sync_fetch_and_sub(&term.working_threads, 1);
@@ -587,7 +600,7 @@ void *run_algorithm(struct thread_params *params) {
         MPI_Status stat;
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
-        DEBUG("S3: got msg %s from R%d", tag2str.at(stat.MPI_TAG),
+        DEBUG("S3: got msg %s from R%d", tag2str(stat.MPI_TAG),
               stat.MPI_SOURCE);
         switch (stat.MPI_TAG) {
         case SOURCE_FOUND:
@@ -614,11 +627,11 @@ void *run_algorithm(struct thread_params *params) {
         case TOKEN_WHITE:
         case TOKEN_RED:
           DEBUG("got old message during step 3 with tag %s",
-                tag2str.at(stat.MPI_TAG));
+                tag2str(stat.MPI_TAG));
           break;
         default:
           ERROR("got invalid message during step 3 with tag %s",
-                tag2str.at(stat.MPI_TAG));
+                tag2str(stat.MPI_TAG));
           break;
         }
       }
