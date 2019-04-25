@@ -47,6 +47,8 @@ struct message_data {
   global_id receivers_node;
   /// The relevant label value (identity depends on message type)
   int label_value;
+  /// The current pass number
+  int pass;
 };
 
 enum message_tags : int {
@@ -257,11 +259,11 @@ void user_pack_vertex(void *data, int num_gid_entries, int num_lid_entries,
                       char *buf, int *ierr) {
   auto *packed = (struct packed_vert *)buf;
   struct vertex &vert = vertices[*local];
-  size_t out_size = sizeof(struct out_edge[vert.out_edges.size()]);
-  size_t in_size = sizeof(struct in_edge[vert.in_edges.size()]);
-
   packed->out_count = vert.out_edges.size();
-  packed->in_count = vert.out_edges.size();
+  packed->in_count = vert.in_edges.size();
+
+  size_t out_size = sizeof(struct out_edge) * packed->out_count;
+  size_t in_size = sizeof(struct in_edge) * packed->in_count;
   memcpy(packed->data, vert.out_edges.data(), out_size);
   memcpy(packed->data + out_size, vert.in_edges.data(), in_size);
 }
@@ -274,8 +276,8 @@ void user_unpack_vertex(void *data, int num_gid_entries, global_id *global,
   struct vertex vert = {*global,
                         vector<struct out_edge>(packed->out_count, out_temp),
                         vector<struct in_edge>(packed->in_count, in_temp)};
-  size_t out_size = sizeof(struct out_edge[packed->out_count]);
-  size_t in_size = sizeof(struct in_edge[packed->in_count]);
+  size_t out_size = sizeof(struct out_edge) * packed->out_count;
+  size_t in_size = sizeof(struct in_edge) * packed->in_count;
   memcpy(vert.out_edges.data(), packed->data, out_size);
   memcpy(vert.in_edges.data(), packed->data + out_size, in_size);
 
@@ -297,8 +299,8 @@ int user_return_obj_size(void *data, int num_global_ids,
                          int *ierr) {
 
   return sizeof(struct packed_vert) +
-         sizeof(struct out_edge[vertices[*local_id].out_edges.size()]) +
-         sizeof(struct in_edge[vertices[*local_id].in_edges.size()]);
+         sizeof(struct out_edge) * vertices[*local_id].out_edges.size() +
+         sizeof(struct in_edge) * vertices[*local_id].in_edges.size();
 }
 
 /************ Zoltan Query Functions End ***************/
@@ -471,6 +473,11 @@ void *run_algorithm(struct thread_params *params) {
             __sync_fetch_and_sub(&term.working_threads, 1);
             continue;
           }
+          if (msg.pass != pass) {
+            ERROR("***** Got old message! *****");
+            __sync_fetch_and_sub(&term.working_threads, 1);
+            continue;
+          }
           if (set_label(msg.senders_node, stat.MPI_SOURCE, -1, vert_idx,
                         msg.label_value)) {
             // found sink!
@@ -488,6 +495,11 @@ void *run_algorithm(struct thread_params *params) {
           vert_idx = lookup_global_id(msg.receivers_node); // from_id
           if (vert_idx == (local_id)-1) {
             ERROR("COMPUTE_FROM_LABEL sent to wrong rank");
+            __sync_fetch_and_sub(&term.working_threads, 1);
+            continue;
+          }
+          if (msg.pass != pass) {
+            ERROR("***** Got old message! *****");
             __sync_fetch_and_sub(&term.working_threads, 1);
             continue;
           }
@@ -594,7 +606,7 @@ void *run_algorithm(struct thread_params *params) {
           while (!edge_queue.pop(entry) && !sink_found && !algorithm_complete) {
             // TODO: may need a mutex. Acquire before entering while loop.
             term.queue_is_empty = true;
-            if (term.have_token && term.working_threads == 0) {
+            if (term.have_token && term.working_threads == 0 && !sink_found) {
               // send token
               // note: our color can only be changed after sending the token
               // (done here) or by a running thread. If we are here, then we
@@ -659,6 +671,7 @@ void *run_algorithm(struct thread_params *params) {
           DEBUG("S2: sending msg SINK_FOUND to R%d (self)", mpi_rank);
           MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, mpi_rank, SINK_FOUND,
                    MPI_COMM_WORLD);
+          sink_found = true;
           __sync_fetch_and_sub(&term.working_threads, 1);
           break;
         }
@@ -702,6 +715,18 @@ void *run_algorithm(struct thread_params *params) {
       }
     }
 
+    // flush all messages
+    int flag = 1;
+    do {
+      MPI_Status stat;
+      MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &flag, &stat);
+      if (flag) {
+        struct message_data msg = {};
+        MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, stat.MPI_SOURCE, stat.MPI_TAG,
+                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      }
+    } while (flag);
+
     DEBUG("entering barrier before step 3");
     MPI_Barrier(MPI_COMM_WORLD);
     fprintf(stderr, "================== START STEP 3 ==================\n");
@@ -741,6 +766,7 @@ void *run_algorithm(struct thread_params *params) {
               vertices[bt_idx].id, // sender's node
               l.prev_node,         // receiver's node
               sink_value,          // label value
+              pass,                // current pass
           };
           DEBUG("S3: sending UPDATE_FLOW to R%d", l.prev_rank_loc);
           MPI_Send(&msg, 1, MPI_MESSAGE_TYPE, l.prev_rank_loc, UPDATE_FLOW,
@@ -872,6 +898,7 @@ local_id handle_out_edge(const struct edge_entry &entry) {
         vertices[from_id].id, // sender's node
         edge.dest_node_id,    // receiver's node
         label_val,            // label value
+        pass,                 // current pass
     };
     // update this rank's color if necessary
     if (edge.rank_location < mpi_rank) {
@@ -918,6 +945,7 @@ local_id handle_in_edge(const struct edge_entry &entry) {
         vertices[to_id].id,    // sender's node
         rev_edge.dest_node_id, // receiver's node
         labels[to_id].value,   // label value
+        pass,                  // current pass
     };
     // update this rank's color if necessary
     if (rev_edge.rank_location < mpi_rank) {
@@ -982,8 +1010,8 @@ int calc_max_flow() {
 
 // Read in an adjacency list file into network
 // Return the vertex count
-int read_file(string filepath) {
-  ifstream file(filepath);
+int read_file(const string &filepath) {
+  ifstream file(filepath.c_str());
 
   // Read first line: number vertices and number edges
   string line;
@@ -994,8 +1022,10 @@ int read_file(string filepath) {
   iss >> num_vertices >> num_edges;
 
   // Initialize all vertices so that their in and out edges can be added to
+  struct vertex temp;
   for (global_id i = 0; i < num_vertices; i++) {
-    vertices.push_back({.id = i, .out_edges = {}, .in_edges = {}});
+    temp.id = i;
+    vertices.push_back(temp);
   }
 
   // Read every line
@@ -1007,11 +1037,12 @@ int read_file(string filepath) {
     int capacity;
     while (iss >> connected_vertex >> capacity) {
       // Create new matching in and out edges
-      vertices[curr_index].out_edges.push_back(
-          {connected_vertex, 0, (local_id)-1, capacity, 0});
+      struct out_edge out_temp = {connected_vertex, 0, (local_id)-1, capacity,
+                                  0};
+      vertices[curr_index].out_edges.push_back(out_temp);
 
-      vertices[connected_vertex].in_edges.push_back(
-          {(global_id)curr_index, 0, (local_id)-1});
+      struct in_edge in_temp = {(global_id)curr_index, 0, (local_id)-1};
+      vertices[connected_vertex].in_edges.push_back(in_temp);
     }
 
     curr_index += 1;
@@ -1034,11 +1065,10 @@ int main(int argc, char **argv) {
 
   {
     // create MPI datatype for inter-rank messages
-    const int count = 3;
-    int block_lengths[count] = {1, 1, 1};
-    MPI_Datatype types[count] = {GLOBAL_ID_TYPE, GLOBAL_ID_TYPE, MPI_INT};
+    const int count = 2;
+    int block_lengths[count] = {2, 2};
+    MPI_Datatype types[count] = {GLOBAL_ID_TYPE, MPI_INT};
     MPI_Aint offsets[count] = {offsetof(message_data, senders_node),
-                               offsetof(message_data, receivers_node),
                                offsetof(message_data, label_value)};
     MPI_Type_create_struct(count, block_lengths, offsets, types,
                            &MPI_MESSAGE_TYPE);
@@ -1077,7 +1107,7 @@ int main(int argc, char **argv) {
   // Initialize Network
   // Root rank will handle partitioning, file reading, broadcasting rank map
 
-  num_threads = 2;
+  num_threads = 10;
 #if !defined(__bgq__) && defined(TEST_CASE)
   // Note: The following blocks don't work on the BG/Q, since it can't do
   //       initializer lists :(
@@ -1281,7 +1311,7 @@ int main(int argc, char **argv) {
   printf("r%d: Next?\n", mpi_rank);
   // Broadcast array of export_processors essentially.
   // Indices represent vertex IDs, values represent the rank they're on
-  MPI_Bcast(&global_id_to_rank, graph_node_count, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(global_id_to_rank, graph_node_count, MPI_INT, 0, MPI_COMM_WORLD);
 
   // Print out all contents for testing
   for (local_id i = 0; i < vertices.size(); i++) {
