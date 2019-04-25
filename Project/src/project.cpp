@@ -19,6 +19,12 @@
 
 using namespace std;
 
+#ifdef __bgq__
+#include <hwi/include/bqc/A2_inlines.h>
+#else
+#define GetTimeBase MPI_Wtime
+#endif
+
 #define DEBUG(fmt, args...)                                                    \
   fprintf(stderr, " DEBUG: %15s():%d R%dT%d: " fmt "\n", __func__, __LINE__,   \
           mpi_rank, tids.at(pthread_self()), ##args)
@@ -90,6 +96,22 @@ const char *tag2str(int tag) {
     return "INVALID_TAG";
   }
 }
+
+/********** Timer stuff ************/
+
+double g_time_in_secs = 0;
+// on the BG/Q, GetTimeBase returns a cycle number, but MPI_Wtime returns a
+// fractional timestamp in seconds. Store the timestamp as a double on other
+// machines, so we get higher resolution than 1 second.
+#ifdef __bgq__
+typedef unsigned long long timebase_t;
+double g_processor_frequency = 1600000000.0; // processing speed for BG/Q
+#else
+typedef double timebase_t;
+double g_processor_frequency = 1.0; // processing speed for other machines
+#endif
+timebase_t g_start_cycles = 0;
+timebase_t g_end_cycles = 0;
 
 /************Zoltan Library Variables **********/
 struct Zoltan_Struct *zz;
@@ -1301,9 +1323,24 @@ int main(int argc, char **argv) {
   source_id = 0;
   sink_id = graph_node_count - 1;
 
+  // Start recording time base
+  if (mpi_rank == 0) {
+    g_start_cycles = GetTimeBase();
+  }
+
+  // Run algorithm
   int max_flow = calc_max_flow();
+
+  // Stop timer
+  if (mpi_rank == 0) {
+    g_end_cycles = GetTimeBase();
+    g_time_in_secs =
+        ((double)(g_end_cycles - g_start_cycles) / g_processor_frequency);
+  }
+
   if (mpi_rank == 0) {
     cout << "Max flow: " << max_flow << endl;
+    cout << "Runtime: " << g_time_in_secs << endl;
   } else {
     delete[] global_id_to_rank;
   }
