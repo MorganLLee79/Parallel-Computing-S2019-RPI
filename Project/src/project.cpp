@@ -5,14 +5,16 @@
 #include <mpi.h>
 
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <limits>
+#include <sstream>
 #include <unordered_map>
 #include <vector>
 
 #include "data-structures.h"
 #include "pthread-wrappers.h"
-#include "zoltan.h"
+#include <zoltan.h>
 
 using namespace std;
 
@@ -105,6 +107,7 @@ struct termination_info {
 vector<struct vertex> vertices;
 vector<struct label> labels;
 unordered_map<global_id, local_id> id_lookup{};
+int *vertex_id_to_ranks;
 /// Set to true when the sink node is found in step 2.
 bool sink_found = false;
 /// The thread that should perform step 3 sets this atomically.
@@ -166,11 +169,11 @@ void user_return_obj_list(void *data, int num_gid_entries, int num_lid_entries,
 // Return the number of edges in the given vertex
 int user_num_edges(void *data, int num_gid_entries, int num_lid_entries,
                    ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int *ierr) {
-  printf("RAN num edges on node %d, size of %d+%d=%d\n", local_id[0],
-         vertices[local_id[0]].in_edges.size(),
-         vertices[local_id[0]].out_edges.size(),
-         (vertices[local_id[0]].in_edges.size() +
-          vertices[local_id[0]].out_edges.size()));
+  // printf("RAN num edges on node %d, size of %d+%d=%d\n", local_id[0],
+  //        vertices[local_id[0]].in_edges.size(),
+  //        vertices[local_id[0]].out_edges.size(),
+  //        (vertices[local_id[0]].in_edges.size() +
+  //         vertices[local_id[0]].out_edges.size()));
 
   *ierr = ZOLTAN_OK;
 
@@ -949,23 +952,20 @@ int calc_max_flow() {
 }
 
 // Read in an adjacency list file into network
-void read_file(string filepath) {
+// Return the vertex count
+int read_file(string filepath) {
   ifstream file(filepath);
 
   // Read first line: number vertices and number edges
   string line;
-  getline(infile, line);
+  getline(file, line);
   int num_vertices, num_edges;
   istringstream iss(line);
-  if (!(iss >> num_vertices >> num_edges)) {
-    break;
-  }
+  iss >> num_vertices >> num_edges;
 
   // Initialize all vertices so that their in and out edges can be added to
   for (int i = 0; i < num_vertices; i++) {
-    vertices.push_back({.id = i,
-                        .out_edges = vector<struct out_edge>,
-                        .in_edges = vector<struct in_edge>})
+    vertices.push_back({.id = i, .out_edges = {}, .in_edges = {}});
   }
 
   // Read every line
@@ -981,18 +981,13 @@ void read_file(string filepath) {
           {connected_vertex, 0, (local_id)-1, capacity, 0});
 
       vertices[connected_vertex].in_edges.push_back(
-          {curr_index, 0, (local_id)-1});
+          {(global_id)curr_index, 0, (local_id)-1});
     }
 
     curr_index += 1;
   }
 
-  /*vector<struct vertex>{
-            {.id = 1,
-             .out_edges = {{2, 0, 1, 1, 0}, {3, 1, 1, 2, 0}},
-             .in_edges = {{0, 0, 0}}},
-            {.id = 3, .out_edges = {}, .in_edges = {{1, 1, 0}, {2, 0, 1}}},
-        }*/
+  return num_vertices;
 }
 
 // For now going to assume all ranks will load the entire graph
@@ -1057,7 +1052,7 @@ int main(int argc, char **argv) {
   // Note: The following blocks don't work on the BG/Q, since it can't do
   //       initializer lists :(
 #ifndef __bgq__
-#define TEST_CASE 1
+#define TEST_CASE 3
 #if TEST_CASE == 1
   // the simplest graph
   graph_node_count = 4;
@@ -1149,6 +1144,91 @@ int main(int argc, char **argv) {
        .flow = 0},
   };
   vertices[5].id = 5;
+#elif TEST_CASE == 3
+  if (mpi_rank == 0 && argc == 2) {
+    graph_node_count = read_file(argv[1]);
+  } else if (mpi_rank == 0 && argc != 2) {
+    printf("ERROR: Was expecting mpirun project.out filepath_to_input");
+    MPI_Finalize();
+  } else {
+    // Nothing for other ranks, wait for partitioning
+  }
+
+  MPI_Bcast(&graph_node_count, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  printf("Ready to partition\n");
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  // Basing on https://cs.sandia.gov/Zoltan/ug_html/ug_examples_lb.html
+  int num_changes; // Set to 1/True if decomposition was changed
+  int num_imported, num_exported, *import_processors, *export_processors;
+  int *import_to_parts, *export_to_parts;
+  int num_gid_entries, num_lid_entries;
+  ZOLTAN_ID_PTR import_global_ids, export_global_ids;
+  ZOLTAN_ID_PTR import_local_ids, export_local_ids;
+  // Parameters essentially: global info(output), import info, export info
+  // printf("r%d: Entering lb partition. n=%d\n", mpi_rank, network.size());
+  Zoltan_LB_Partition(zz, &num_changes, &num_gid_entries, &num_lid_entries,
+                      &num_imported, &import_global_ids, &import_local_ids,
+                      &import_processors, &import_to_parts, &num_exported,
+                      &export_global_ids, &export_local_ids, &export_processors,
+                      &export_to_parts);
+  // Also handles data migration as AUTO_MIGRATE was set to true
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  printf("r%d: imported %d, exported %d. num_changes=%d Final size=%lu; g/l id "
+         "entries:%d, %d\n",
+         mpi_rank, num_imported, num_exported, num_changes, vertices.size(),
+         num_gid_entries, num_lid_entries);
+  for (int i = 0; i < vertices.size(); i++) {
+
+    if (num_exported == 0) {
+      printf("r%d: vertices[%lu]=%lu. %lu in, %lu out.\n", mpi_rank, i,
+             vertices[i].id, vertices[i].in_edges.size(),
+             vertices[i].out_edges.size());
+    } else {
+      printf("r%d: vertices[%lu]=%lu. %lu in, %lu out; exported to rank %d\n",
+             mpi_rank, i, vertices[i].id, vertices[i].in_edges.size(),
+             vertices[i].out_edges.size(), export_processors[i]);
+    }
+  }
+
+  // Process the map of where vertices went and remove exported vertices
+  unsigned long long id_rank_map[vertices.size()];
+  if (mpi_rank == 0) {
+    vertex_id_to_ranks = export_processors;
+
+    for (int i = vertices.size() - 1; i >= 0; i--) { // Iterate in reverse
+
+      // Map all export_processors to id_rank_map
+      // Wait, export_processors already it?
+
+      // Remove from this rank if it was exported
+      if (export_processors[i] != mpi_rank) {
+        printf("r%d: removing exported network[%lu]=%lu. Was exported to% d\n",
+               mpi_rank, i, vertices[i].id, export_processors[i]);
+        vertices.erase(vertices.begin() + i);
+      }
+    }
+  }
+  // MPI_Barrier(MPI_COMM_WORLD);
+  // MPI_Bcast(&total_network_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  printf("r%d: Next?\n", mpi_rank);
+  MPI_Barrier(MPI_COMM_WORLD);
+  // Broadcast array of export_processors essentially.
+  // Indices represent vertex IDs, values represent the rank they're on
+  MPI_Bcast(&vertex_id_to_ranks, graph_node_count, MPI_INT, 0, MPI_COMM_WORLD);
+
+  // Print out all contents for testing
+  for (int i = 0; i < vertices.size(); i++) {
+    printf("r%d: id=%llu; in_size=%lu, out_size=%lu\n", mpi_rank,
+           vertices[i].id, vertices[i].in_edges.size(),
+           vertices[i].out_edges.size());
+  }
+
+  // Other stuff to fill out? TODO check
+
+  /* Ready to begin algorithm! */
+
 #endif
 
   // construct in_edges
