@@ -661,9 +661,11 @@ void *run_algorithm(struct thread_params *params) {
     dump_labels();
 
     // tell the next rank to stop
-    DEBUG("S3: sending SINK_FOUND to R%d", (mpi_rank + 1) % mpi_size);
-    MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size, SINK_FOUND,
-             MPI_COMM_WORLD);
+    if (mpi_size > 1) {
+      DEBUG("S3: sending SINK_FOUND to R%d", (mpi_rank + 1) % mpi_size);
+      MPI_Send(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size, SINK_FOUND,
+               MPI_COMM_WORLD);
+    }
 
     if (bt_idx != (local_id)-1) {
       // we found the sink and started step 3
