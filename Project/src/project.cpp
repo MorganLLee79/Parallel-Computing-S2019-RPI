@@ -121,7 +121,7 @@ struct termination_info {
 vector<struct vertex> vertices;
 vector<struct label> labels;
 map<global_id, local_id> global_to_local;
-int *vertex_id_to_ranks;
+int *global_id_to_rank;
 /// Set to true when the sink node is found in step 2.
 bool sink_found = false;
 /// The thread that should perform step 3 sets this atomically.
@@ -190,8 +190,8 @@ int user_num_edges(void *data, int num_gid_entries, int num_lid_entries,
 
   *ierr = ZOLTAN_OK;
 
-  return (vertices[local_id[0]].in_edges.size() +
-          vertices[local_id[0]].out_edges.size());
+  return vertices[*local_id].in_edges.size() +
+         vertices[*local_id].out_edges.size();
 }
 
 // Return list of global ids, processor ids for nodes sharing an edge with the
@@ -202,20 +202,20 @@ void user_return_edge_list(void *data, int num_gid_entries, int num_lid_entries,
                            int wgt_dim, float *ewgts, int *ierr) {
   // printf("-------%d, %d-%d; g:%d,l:%d\n", vertices.size(), num_gid_entries,
   //        num_lid_entries, *global_id, *local_id);
-  vertex curr_vertex = vertices[(unsigned long long)*local_id];
+  const vertex &curr_vertex = vertices[*local_id];
 
   // printf("step 1\n");
   // go through all neighboring edges. in then out edges
-  for (size_t i = 0; i < curr_vertex.in_edges.size(); ++i) {
-    nbor_global_id[i] = curr_vertex.in_edges[i].dest_node_id;
-    nbor_procs[i] = curr_vertex.in_edges[i].rank_location;
+  size_t nbor_idx = 0;
+  for (size_t i = 0; i < curr_vertex.in_edges.size(); ++i, ++nbor_idx) {
+    nbor_global_id[nbor_idx] = curr_vertex.in_edges[i].dest_node_id;
+    nbor_procs[nbor_idx] = curr_vertex.in_edges[i].rank_location;
   }
   // printf("step 2\n");
 
-  size_t offset = curr_vertex.in_edges.size();
-  for (size_t i = 0; i < curr_vertex.out_edges.size(); ++i) {
-    nbor_global_id[i + offset] = curr_vertex.out_edges[i].dest_node_id;
-    nbor_procs[i + offset] = curr_vertex.out_edges[i].rank_location;
+  for (size_t i = 0; i < curr_vertex.out_edges.size(); ++i, ++nbor_idx) {
+    nbor_global_id[nbor_idx] = curr_vertex.out_edges[i].dest_node_id;
+    nbor_procs[nbor_idx] = curr_vertex.out_edges[i].rank_location;
   }
   // printf("step 3\n");
 
@@ -230,8 +230,6 @@ struct packed_vert {
   unsigned char data[];
 };
 
-vector<local_id> to_remove;
-
 void user_pack_vertex(void *data, int num_gid_entries, int num_lid_entries,
                       global_id *global, local_id *local, int dest, int size,
                       char *buf, int *ierr) {
@@ -244,9 +242,6 @@ void user_pack_vertex(void *data, int num_gid_entries, int num_lid_entries,
   packed->in_count = vert.out_edges.size();
   memcpy(packed->data, vert.out_edges.data(), out_size);
   memcpy(packed->data + out_size, vert.in_edges.data(), in_size);
-  global_to_local.erase(*global);
-  // add index to a list to remove after migration
-  to_remove.push_back(*local);
 }
 
 void user_unpack_vertex(void *data, int num_gid_entries, global_id *global,
@@ -270,9 +265,7 @@ void user_unpack_vertex(void *data, int num_gid_entries, global_id *global,
     it->rank_location = mpi_rank;
   }
 
-  local_id idx = vertices.size();
   vertices.push_back(vert);
-  global_to_local[*global] = idx;
 }
 
 // Copy all needed data for a single object into a communication buffer
@@ -379,7 +372,6 @@ void *run_algorithm(struct thread_params *params) {
   tids[pthread_self()] = tid;
   Barrier &barrier = params->barrier;
 
-  // TODO: figure out how to detect deadlocks
   while (!algorithm_complete) {
     // synchronize all threads before each iteration
     barrier.wait();
@@ -1200,19 +1192,16 @@ int main(int argc, char **argv) {
   }
 #else // read from file
   if (mpi_rank == 0 && argc == 2) {
-    printf("Here\n");
     graph_node_count = read_file(argv[1]);
   } else if (mpi_rank == 0 && argc != 2) {
     printf("ERROR: Was expecting mpirun project.out filepath_to_input");
     MPI_Finalize();
   } else {
-    printf("There\n");
     // Nothing for other ranks, wait for partitioning
   }
 
   MPI_Bcast(&graph_node_count, 1, MPI_INT, 0, MPI_COMM_WORLD);
   printf("Ready to partition\n");
-  MPI_Barrier(MPI_COMM_WORLD);
 
   // Basing on https://cs.sandia.gov/Zoltan/ug_html/ug_examples_lb.html
   int num_changes; // Set to 1/True if decomposition was changed
@@ -1235,50 +1224,71 @@ int main(int argc, char **argv) {
          "entries:%d, %d\n",
          mpi_rank, num_imported, num_exported, num_changes, vertices.size(),
          num_gid_entries, num_lid_entries);
-  for (int i = 0; i < vertices.size(); i++) {
-
+  for (local_id i = 0; i < vertices.size(); i++) {
     if (num_exported == 0) {
-      printf("r%d: vertices[%lu]=%lu. %lu in, %lu out.\n", mpi_rank, i,
+      printf("r%d: vertices[%lu]=%llu. %lu in, %lu out.\n", mpi_rank, i,
              vertices[i].id, vertices[i].in_edges.size(),
              vertices[i].out_edges.size());
     } else {
-      printf("r%d: vertices[%lu]=%lu. %lu in, %lu out; exported to rank %d\n",
+      printf("r%d: vertices[%lu]=%llu. %lu in, %lu out; exported to rank %d\n",
              mpi_rank, i, vertices[i].id, vertices[i].in_edges.size(),
              vertices[i].out_edges.size(), export_processors[i]);
     }
   }
 
   // Process the map of where vertices went and remove exported vertices
-  unsigned long long id_rank_map[vertices.size()];
   if (mpi_rank == 0) {
-    vertex_id_to_ranks = export_processors;
+    global_id_to_rank = export_processors;
 
     for (long long i = vertices.size() - 1; i >= 0; i--) { // Iterate in reverse
-
-      // Map all export_processors to id_rank_map
-      // Wait, export_processors already it?
-
       // Remove from this rank if it was exported
       if (export_processors[i] != mpi_rank) {
-        printf("r%d: removing exported network[%lu]=%lu. Was exported to %d\n",
+        printf("r%d: removing exported network[%lld]=%llu. Was exported to "
+               "%d\n",
                mpi_rank, i, vertices[i].id, export_processors[i]);
         vertices.erase(vertices.begin() + i);
       }
     }
+  } else {
+    global_id_to_rank = new int[graph_node_count];
   }
   // MPI_Barrier(MPI_COMM_WORLD);
   // MPI_Bcast(&total_network_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
   printf("r%d: Next?\n", mpi_rank);
-  MPI_Barrier(MPI_COMM_WORLD);
   // Broadcast array of export_processors essentially.
   // Indices represent vertex IDs, values represent the rank they're on
-  MPI_Bcast(&vertex_id_to_ranks, graph_node_count, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&global_id_to_rank, graph_node_count, MPI_INT, 0, MPI_COMM_WORLD);
 
   // Print out all contents for testing
-  for (int i = 0; i < vertices.size(); i++) {
+  for (local_id i = 0; i < vertices.size(); i++) {
     printf("r%d: id=%llu; in_size=%lu, out_size=%lu\n", mpi_rank,
            vertices[i].id, vertices[i].in_edges.size(),
            vertices[i].out_edges.size());
+  }
+
+  // construct global-to-local ID lookup
+  for (local_id i = 0; i < vertices.size(); ++i) {
+    global_to_local[vertices[i].id] = i;
+  }
+
+  // update all local indices and rank locations in all edges
+  for (auto v_it = vertices.begin(); v_it != vertices.end(); ++v_it) {
+    for (auto it = v_it->out_edges.begin(); it != v_it->out_edges.end(); ++it) {
+      // update rank location of the "to" node
+      it->rank_location = global_id_to_rank[it->dest_node_id];
+      if (it->rank_location == mpi_rank) {
+        // "to" node is on this rank, store local index
+        it->vert_index = global_to_local[it->dest_node_id];
+      }
+    }
+    for (auto it = v_it->in_edges.begin(); it != v_it->in_edges.end(); ++it) {
+      // update rank location of the "from" node
+      it->rank_location = global_id_to_rank[it->dest_node_id];
+      if (it->rank_location == mpi_rank) {
+        // "from" node is on this rank, store local index
+        it->vert_index = global_to_local[it->dest_node_id];
+      }
+    }
   }
 
   // Other stuff to fill out? TODO check
@@ -1286,10 +1296,6 @@ int main(int argc, char **argv) {
   /* Ready to begin algorithm! */
 
 #endif
-
-  for (local_id i = 0; i < vertices.size(); ++i) {
-    global_to_local[vertices[i].id] = i;
-  }
   source_id = 0;
   sink_id = graph_node_count - 1;
 
