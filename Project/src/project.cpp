@@ -5,16 +5,17 @@
 #include <mpi.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <limits>
 #include <sstream>
-#include <unordered_map>
+#include <map>
 #include <vector>
+#include <zoltan.h>
 
 #include "data-structures.h"
 #include "pthread-wrappers.h"
-#include <zoltan.h>
 
 using namespace std;
 
@@ -26,7 +27,7 @@ using namespace std;
           mpi_rank, tids.at(pthread_self()), ##args)
 
 /// TID lookup table for debugging
-unordered_map<int, int> tids{};
+map<int, int> tids;
 
 /************MPI Variables *********************/
 int mpi_rank;
@@ -65,17 +66,30 @@ enum message_tags : int {
   CHECK_TERMINATION,
 };
 
-const unordered_map<int, const char *> tag2str{
-    {SET_TO_LABEL, "SET_TO_LABEL"},
-    {COMPUTE_FROM_LABEL, "COMPUTE_FROM_LABEL"},
-    {SINK_FOUND, "SINK_FOUND"},
-    {UPDATE_FLOW, "UPDATE_FLOW"},
-    {SOURCE_FOUND, "SOURCE_FOUND"},
-    {TOTAL_FLOW, "TOTAL_FLOW"},
-    {TOKEN_WHITE, "TOKEN_WHITE"},
-    {TOKEN_RED, "TOKEN_RED"},
-    {CHECK_TERMINATION, "CHECK_TERMINATION"},
-};
+const char *tag2str(int tag) {
+  switch (tag) {
+  case SET_TO_LABEL:
+    return "SET_TO_LABEL";
+  case COMPUTE_FROM_LABEL:
+    return "COMPUTE_FROM_LABEL";
+  case SINK_FOUND:
+    return "SINK_FOUND";
+  case UPDATE_FLOW:
+    return "UPDATE_FLOW";
+  case SOURCE_FOUND:
+    return "SOURCE_FOUND";
+  case TOTAL_FLOW:
+    return "TOTAL_FLOW";
+  case TOKEN_WHITE:
+    return "TOKEN_WHITE";
+  case TOKEN_RED:
+    return "TOKEN_RED";
+  case CHECK_TERMINATION:
+    return "CHECK_TERMINATION";
+  default:
+    return "INVALID_TAG";
+  }
+}
 
 /************Zoltan Library Variables **********/
 struct Zoltan_Struct *zz;
@@ -106,7 +120,7 @@ struct termination_info {
 // entries in `vertices` and entries in `labels` must correspond one-to-one
 vector<struct vertex> vertices;
 vector<struct label> labels;
-unordered_map<global_id, local_id> id_lookup{};
+map<global_id, local_id> id_lookup;
 int *vertex_id_to_ranks;
 /// Set to true when the sink node is found in step 2.
 bool sink_found = false;
@@ -433,7 +447,7 @@ void *run_algorithm(struct thread_params *params) {
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
         __sync_fetch_and_add(&term.working_threads, 1);
-        DEBUG("S2: got msg %s from R%d", tag2str.at(stat.MPI_TAG),
+        DEBUG("S2: got msg %s from R%d", tag2str(stat.MPI_TAG),
               stat.MPI_SOURCE);
         switch (stat.MPI_TAG) {
         case SET_TO_LABEL:
@@ -553,7 +567,7 @@ void *run_algorithm(struct thread_params *params) {
           }
         } break;
         default:
-          ERROR("got invalid tag in step 2: %s", tag2str.at(stat.MPI_TAG));
+          ERROR("got invalid tag in step 2: %s", tag2str(stat.MPI_TAG));
           break;
         }
         __sync_fetch_and_sub(&term.working_threads, 1);
@@ -734,7 +748,7 @@ void *run_algorithm(struct thread_params *params) {
         MPI_Status stat;
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
-        DEBUG("S3: got msg %s from R%d", tag2str.at(stat.MPI_TAG),
+        DEBUG("S3: got msg %s from R%d", tag2str(stat.MPI_TAG),
               stat.MPI_SOURCE);
         switch (stat.MPI_TAG) {
         case SOURCE_FOUND:
@@ -761,11 +775,11 @@ void *run_algorithm(struct thread_params *params) {
         case TOKEN_WHITE:
         case TOKEN_RED:
           DEBUG("got old message during step 3 with tag %s",
-                tag2str.at(stat.MPI_TAG));
+                tag2str(stat.MPI_TAG));
           break;
         default:
           ERROR("got invalid message during step 3 with tag %s",
-                tag2str.at(stat.MPI_TAG));
+                tag2str(stat.MPI_TAG));
           break;
         }
       }
@@ -1052,7 +1066,7 @@ int main(int argc, char **argv) {
   // Note: The following blocks don't work on the BG/Q, since it can't do
   //       initializer lists :(
 #ifndef __bgq__
-#define TEST_CASE 3
+#define TEST_CASE 1
 #if TEST_CASE == 1
   // the simplest graph
   graph_node_count = 4;
@@ -1087,63 +1101,89 @@ int main(int argc, char **argv) {
   // slightly more complicated graph
   graph_node_count = 6;
 
-  vertices = vector<struct vertex>(graph_node_count);
-  vertices[0].id = 0;
-  vertices[0].out_edges = vector<out_edge>{
-      {.dest_node_id = 1,
-       .rank_location = 0,
-       .vert_index = 1,
-       .capacity = 3,
-       .flow = 0},
-      {.dest_node_id = 2,
-       .rank_location = 0,
-       .vert_index = 1,
-       .capacity = 3,
-       .flow = 0},
-  };
-  vertices[1].id = 1;
-  vertices[1].out_edges = vector<out_edge>{
-      {.dest_node_id = 2,
-       .rank_location = 0,
-       .vert_index = 2,
-       .capacity = 2,
-       .flow = 0},
-      {.dest_node_id = 3,
-       .rank_location = 0,
-       .vert_index = 3,
-       .capacity = 3,
-       .flow = 0},
-  };
-  vertices[2].id = 2;
-  vertices[2].out_edges = vector<out_edge>{
-      {.dest_node_id = 4,
-       .rank_location = 0,
-       .vert_index = 4,
-       .capacity = 2,
-       .flow = 0},
-  };
-  vertices[3].id = 3;
-  vertices[3].out_edges = vector<out_edge>{
-      {.dest_node_id = 4,
-       .rank_location = 0,
-       .vert_index = 4,
-       .capacity = 4,
-       .flow = 0},
-      {.dest_node_id = 5,
-       .rank_location = 0,
-       .vert_index = 5,
-       .capacity = 2,
-       .flow = 0},
-  };
-  vertices[4].id = 4;
-  vertices[4].out_edges = vector<out_edge>{
-      {.dest_node_id = 5,
-       .rank_location = 0,
-       .vert_index = 5,
-       .capacity = 3,
-       .flow = 0},
-  };
-  vertices[5].id = 5;
+  if (mpi_size == 1) {
+    vertices = vector<struct vertex>(graph_node_count);
+    vertices[0].id = 0;
+    vertices[0].out_edges = vector<out_edge>{
+        {.dest_node_id = 1,
+         .rank_location = 0,
+         .vert_index = 1,
+         .capacity = 3,
+         .flow = 0},
+        {.dest_node_id = 2,
+         .rank_location = 0,
+         .vert_index = 1,
+         .capacity = 3,
+         .flow = 0},
+    };
+    vertices[1].id = 1;
+    vertices[1].out_edges = vector<out_edge>{
+        {.dest_node_id = 2,
+         .rank_location = 0,
+         .vert_index = 2,
+         .capacity = 2,
+         .flow = 0},
+        {.dest_node_id = 3,
+         .rank_location = 0,
+         .vert_index = 3,
+         .capacity = 3,
+         .flow = 0},
+    };
+    vertices[2].id = 2;
+    vertices[2].out_edges = vector<out_edge>{
+        {.dest_node_id = 4,
+         .rank_location = 0,
+         .vert_index = 4,
+         .capacity = 2,
+         .flow = 0},
+    };
+    vertices[3].id = 3;
+    vertices[3].out_edges = vector<out_edge>{
+        {.dest_node_id = 4,
+         .rank_location = 0,
+         .vert_index = 4,
+         .capacity = 4,
+         .flow = 0},
+        {.dest_node_id = 5,
+         .rank_location = 0,
+         .vert_index = 5,
+         .capacity = 2,
+         .flow = 0},
+    };
+    vertices[4].id = 4;
+    vertices[4].out_edges = vector<out_edge>{
+        {.dest_node_id = 5,
+         .rank_location = 0,
+         .vert_index = 5,
+         .capacity = 3,
+         .flow = 0},
+    };
+    vertices[5].id = 5;
+  } else if (mpi_size == 2) {
+    if (mpi_rank == 0) {
+      vertices = vector<struct vertex>{
+          {.id = 0,
+           .out_edges = {{1, 0, 1, 3, 0}, {2, 0, 2, 3, 0}},
+           .in_edges = {}},
+          {.id = 1,
+           .out_edges = {{3, 1, (local_id)-1, 3, 0}, {2, 0, 2, 2, 0}},
+           .in_edges = {{0, 0, 0}}},
+          {.id = 2,
+           .out_edges = {{4, 1, (local_id)-1, 2, 0}},
+           .in_edges = {{0, 0, 0}, {1, 0, 1}}},
+      };
+    } else {
+      vertices = vector<struct vertex>{
+          {.id = 3,
+           .out_edges = {{5, 1, 2, 2, 0}, {4, 1, 1, 4, 0}},
+           .in_edges = {{1, 0, (local_id)-1}}},
+          {.id = 4,
+           .out_edges = {{5, 1, 2, 3, 0}},
+           .in_edges = {{2, 0, (local_id)-1}}},
+          {.id = 5, .out_edges = {}, .in_edges = {{3, 1, 0}, {4, 1, 1}}},
+      };
+    }
+  }
 #elif TEST_CASE == 3
   if (mpi_rank == 0 && argc == 2) {
     graph_node_count = read_file(argv[1]);
