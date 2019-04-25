@@ -552,8 +552,21 @@ void *run_algorithm(struct thread_params *params) {
             } else {
               DEBUG("Thread %d is handling step 3", old_val);
             }
+            sink_found = true;
+          } else {
+            // running with one rank
+            sink_found = true;
+            // flush white tokens from own rank
+            int flag = 1;
+            do {
+              MPI_Iprobe(mpi_rank, TOKEN_WHITE, MPI_COMM_WORLD, &flag,
+                         MPI_STATUS_IGNORE);
+              if (flag) {
+                MPI_Recv(NULL, 0, MPI_MESSAGE_TYPE, mpi_rank, TOKEN_WHITE,
+                         MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+              }
+            } while (flag);
           }
-          sink_found = true;
           break;
         case TOKEN_WHITE:
         case TOKEN_RED:
