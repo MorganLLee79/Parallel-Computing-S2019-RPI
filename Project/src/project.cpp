@@ -884,63 +884,89 @@ int main(int argc, char **argv) {
   // slightly more complicated graph
   graph_node_count = 6;
 
-  vertices = vector<struct vertex>(graph_node_count);
-  vertices[0].id = 0;
-  vertices[0].out_edges = vector<out_edge>{
-      {.dest_node_id = 1,
-       .rank_location = 0,
-       .vert_index = 1,
-       .capacity = 3,
-       .flow = 0},
-      {.dest_node_id = 2,
-       .rank_location = 0,
-       .vert_index = 1,
-       .capacity = 3,
-       .flow = 0},
-  };
-  vertices[1].id = 1;
-  vertices[1].out_edges = vector<out_edge>{
-      {.dest_node_id = 2,
-       .rank_location = 0,
-       .vert_index = 2,
-       .capacity = 2,
-       .flow = 0},
-      {.dest_node_id = 3,
-       .rank_location = 0,
-       .vert_index = 3,
-       .capacity = 3,
-       .flow = 0},
-  };
-  vertices[2].id = 2;
-  vertices[2].out_edges = vector<out_edge>{
-      {.dest_node_id = 4,
-       .rank_location = 0,
-       .vert_index = 4,
-       .capacity = 2,
-       .flow = 0},
-  };
-  vertices[3].id = 3;
-  vertices[3].out_edges = vector<out_edge>{
-      {.dest_node_id = 4,
-       .rank_location = 0,
-       .vert_index = 4,
-       .capacity = 4,
-       .flow = 0},
-      {.dest_node_id = 5,
-       .rank_location = 0,
-       .vert_index = 5,
-       .capacity = 2,
-       .flow = 0},
-  };
-  vertices[4].id = 4;
-  vertices[4].out_edges = vector<out_edge>{
-      {.dest_node_id = 5,
-       .rank_location = 0,
-       .vert_index = 5,
-       .capacity = 3,
-       .flow = 0},
-  };
-  vertices[5].id = 5;
+  if (mpi_size == 1) {
+    vertices = vector<struct vertex>(graph_node_count);
+    vertices[0].id = 0;
+    vertices[0].out_edges = vector<out_edge>{
+        {.dest_node_id = 1,
+         .rank_location = 0,
+         .vert_index = 1,
+         .capacity = 3,
+         .flow = 0},
+        {.dest_node_id = 2,
+         .rank_location = 0,
+         .vert_index = 1,
+         .capacity = 3,
+         .flow = 0},
+    };
+    vertices[1].id = 1;
+    vertices[1].out_edges = vector<out_edge>{
+        {.dest_node_id = 2,
+         .rank_location = 0,
+         .vert_index = 2,
+         .capacity = 2,
+         .flow = 0},
+        {.dest_node_id = 3,
+         .rank_location = 0,
+         .vert_index = 3,
+         .capacity = 3,
+         .flow = 0},
+    };
+    vertices[2].id = 2;
+    vertices[2].out_edges = vector<out_edge>{
+        {.dest_node_id = 4,
+         .rank_location = 0,
+         .vert_index = 4,
+         .capacity = 2,
+         .flow = 0},
+    };
+    vertices[3].id = 3;
+    vertices[3].out_edges = vector<out_edge>{
+        {.dest_node_id = 4,
+         .rank_location = 0,
+         .vert_index = 4,
+         .capacity = 4,
+         .flow = 0},
+        {.dest_node_id = 5,
+         .rank_location = 0,
+         .vert_index = 5,
+         .capacity = 2,
+         .flow = 0},
+    };
+    vertices[4].id = 4;
+    vertices[4].out_edges = vector<out_edge>{
+        {.dest_node_id = 5,
+         .rank_location = 0,
+         .vert_index = 5,
+         .capacity = 3,
+         .flow = 0},
+    };
+    vertices[5].id = 5;
+  } else if (mpi_size == 2) {
+    if (mpi_rank == 0) {
+      vertices = vector<struct vertex>{
+          {.id = 0,
+           .out_edges = {{1, 0, 1, 3, 0}, {2, 0, 2, 3, 0}},
+           .in_edges = {}},
+          {.id = 1,
+           .out_edges = {{3, 1, (local_id)-1, 3, 0}, {2, 0, 2, 2, 0}},
+           .in_edges = {{0, 0, 0}}},
+          {.id = 2,
+           .out_edges = {{4, 1, (local_id)-1, 2, 0}},
+           .in_edges = {{0, 0, 0}, {1, 0, 1}}},
+      };
+    } else {
+      vertices = vector<struct vertex>{
+          {.id = 3,
+           .out_edges = {{5, 1, 2, 2, 0}, {4, 1, 1, 4, 0}},
+           .in_edges = {{1, 0, (local_id)-1}}},
+          {.id = 4,
+           .out_edges = {{5, 1, 2, 3, 0}},
+           .in_edges = {{2, 0, (local_id)-1}}},
+          {.id = 5, .out_edges = {}, .in_edges = {{3, 1, 0}, {4, 1, 1}}},
+      };
+    }
+  }
 #endif
 
   // construct in_edges
