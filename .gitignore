@@ -3,3 +3,5 @@
 *.o
 *.out
 /Project/src/projectv0.cpp
+
+/Project/TestGraphs/large*
