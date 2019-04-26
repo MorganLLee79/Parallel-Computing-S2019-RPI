@@ -11,4 +11,5 @@ srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/roadn
 srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/roadnet-TX.adj 64 > $SCRATCH/16_rank_results/16r-TX.log &
 srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/roadnet-CA.adj 64 > $SCRATCH/16_rank_results/16r-CA.log &
 srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/social-slashdot.adj 64 > $SCRATCH/16_rank_results/16r-social.log &
-srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/web-google.adj 64 > $SCRATCH/16_rank_results/16r-webcrawl.log
+srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/web-google.adj 64 > $SCRATCH/16_rank_results/16r-webcrawl.log &
+wait
