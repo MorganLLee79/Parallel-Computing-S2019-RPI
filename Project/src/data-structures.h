@@ -100,8 +100,6 @@ private:
   Mutex t_lock;
 
 public:
-  Mutex h_lock;
-
   EdgeQueue();
   ~EdgeQueue();
 
@@ -111,7 +109,7 @@ public:
    * Try to remove an entry from the front of the queue and store it in
    * @p entry. If the queue is empty, @p entry is not modified.
    *
-   * N.B. This function must only be called while holding @a h_lock.
+   * N.B. This function must only be called by one thread at a time.
    *
    * @return @c true if an entry was retrieved, @c false if the queue is empty
    */

@@ -29,14 +29,14 @@ using namespace std;
 #define DEBUG(lvl, fmt, args...)                                               \
   do {                                                                         \
     if ((lvl) <= DEBUG_MODE)                                                   \
-      fprintf(stderr, " DEBUG: %15s():%-4d R%dT%d: " fmt "\n", __func__,       \
-                                                                               \
-              __LINE__, mpi_rank, tids.at(pthread_self()), ##args);            \
+      fprintf(                                                                 \
+          stderr, "%9.5f DEBUG: %15s():%-4d R%dT%d: " fmt "\n",                \
+          ((double)(GetTimeBase() - g_start_cycles) / g_processor_frequency),  \
+          __func__, __LINE__, mpi_rank, tid, ##args);                          \
   } while (0)
 #define ERROR(fmt, args...)                                                    \
-  fprintf(stderr, "*ERROR: %15s():%-4d R%dT%d: " fmt "\n", __func__, __LINE__, \
-                                                                               \
-          mpi_rank, tids.at(pthread_self()), ##args)
+  fprintf(stderr, "ERROR: %15s():%-4d R%dT%d: " fmt "\n", __func__, __LINE__,  \
+          mpi_rank, tid, ##args)
 #define dump_labels()                                                          \
   do {                                                                         \
     for (local_id i = 0; i < labels.size(); i++) {                             \
@@ -68,9 +68,6 @@ using namespace std;
   do {                                                                         \
   } while (0)
 #endif
-
-/// TID lookup table for debugging
-map<int, int> tids;
 
 /************MPI Variables *********************/
 int mpi_rank;
@@ -165,18 +162,16 @@ global_id graph_node_count;
 global_id source_id = -1;
 global_id sink_id = -1;
 
-struct termination_info {
-  /// Number of threads currently doing work (not waiting for messages or edges)
-  int working_threads;
-  /// The current color of this rank
-  enum message_tags my_color;
-  /// Whether we currently have the token
-  bool have_token;
-  /// The color of the token, if we have it;
-  enum message_tags token_color;
-  /// Set if a worker thread has found the queue to be empty.
-  bool queue_is_empty;
-} term;
+/// Number of threads currently doing work (not waiting for messages or edges)
+int working_threads;
+/// The current color of this rank
+enum message_tags my_color;
+/// Whether we currently have the token
+bool have_token;
+/// The color of the token, if we have it;
+enum message_tags token_color;
+/// Set if a worker thread has found the queue to be empty.
+bool queue_is_empty;
 
 // entries in `vertices` and entries in `labels` must correspond one-to-one
 vector<struct vertex> vertices;
@@ -194,6 +189,7 @@ int pass = 1;
 bool algorithm_complete = false;
 
 EdgeQueue edge_queue;
+Mutex h_lock;
 
 struct thread_params {
   int tid;
@@ -362,7 +358,6 @@ void insert_edges(local_id vert_idx) {
         true,     // is_outgoing
         i,        // edge_index
     };
-    DEBUG(3, "Adding (%llu, %llu) to queue (fwd)", v.id, edge.dest_node_id);
     edge_queue.push(temp);
   }
 
@@ -379,7 +374,6 @@ void insert_edges(local_id vert_idx) {
         false,    // is_outgoing
         i,        // edge_index
     };
-    DEBUG(3, "Adding (%llu, %llu) to queue (rev)", v.id, edge.dest_node_id);
     edge_queue.push(temp);
   }
 }
@@ -390,7 +384,7 @@ void insert_edges(local_id vert_idx) {
  *
  * @param entry The edge to process.
  */
-local_id handle_out_edge(const struct edge_entry &entry);
+local_id handle_out_edge(const struct edge_entry &entry, int tid);
 
 /**
  * Sets @c sink_found and returns the local id of the sink node if it was
@@ -398,7 +392,7 @@ local_id handle_out_edge(const struct edge_entry &entry);
  *
  * @param entry The edge to process.
  */
-local_id handle_in_edge(const struct edge_entry &entry);
+local_id handle_in_edge(const struct edge_entry &entry, int tid);
 
 /**
  * Returns @c true if @p curr_idx is the sink node and we successfully set its
@@ -426,7 +420,6 @@ void wait_and_flush(int tag,
 
 void *run_algorithm(struct thread_params *params) {
   int tid = params->tid;
-  tids[pthread_self()] = tid;
   Barrier &barrier = params->barrier;
 
   while (!algorithm_complete) {
@@ -440,11 +433,11 @@ void *run_algorithm(struct thread_params *params) {
       // wipe previous labels
       fill(labels.begin(), labels.end(), EMPTY_LABEL);
       // setup globals
-      term.working_threads = 0;
-      term.my_color = TOKEN_WHITE;
-      term.have_token = mpi_rank == 0;
-      term.token_color = TOKEN_WHITE;
-      term.queue_is_empty = false;
+      working_threads = 0;
+      my_color = TOKEN_WHITE;
+      have_token = mpi_rank == 0;
+      token_color = TOKEN_WHITE;
+      queue_is_empty = false;
       sink_found = false;
       step_3_tid = -1;
 
@@ -494,7 +487,7 @@ void *run_algorithm(struct thread_params *params) {
         MPI_Status stat;
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
-        __sync_fetch_and_add(&term.working_threads, 1);
+        __sync_fetch_and_add(&working_threads, 1);
         DEBUG(2, "S2: got msg %s from R%d", tag2str(stat.MPI_TAG),
               stat.MPI_SOURCE);
         switch (stat.MPI_TAG) {
@@ -503,12 +496,12 @@ void *run_algorithm(struct thread_params *params) {
           vert_idx = lookup_global_id(msg.receivers_node);
           if (vert_idx == (local_id)-1) {
             ERROR("SET_TO_LABEL sent to wrong rank");
-            __sync_fetch_and_sub(&term.working_threads, 1);
+            __sync_fetch_and_sub(&working_threads, 1);
             continue;
           }
           if (msg.pass != pass) {
             ERROR("***** Got old message! *****");
-            __sync_fetch_and_sub(&term.working_threads, 1);
+            __sync_fetch_and_sub(&working_threads, 1);
             continue;
           }
           if (set_label(msg.senders_node, stat.MPI_SOURCE, -1, vert_idx,
@@ -528,12 +521,12 @@ void *run_algorithm(struct thread_params *params) {
           vert_idx = lookup_global_id(msg.receivers_node); // from_id
           if (vert_idx == (local_id)-1) {
             ERROR("COMPUTE_FROM_LABEL sent to wrong rank");
-            __sync_fetch_and_sub(&term.working_threads, 1);
+            __sync_fetch_and_sub(&working_threads, 1);
             continue;
           }
           if (msg.pass != pass) {
             ERROR("***** Got old message! *****");
-            __sync_fetch_and_sub(&term.working_threads, 1);
+            __sync_fetch_and_sub(&working_threads, 1);
             continue;
           }
 
@@ -547,7 +540,7 @@ void *run_algorithm(struct thread_params *params) {
             }
           }
           if (curr_flow <= 0) {
-            __sync_fetch_and_sub(&term.working_threads, 1);
+            __sync_fetch_and_sub(&working_threads, 1);
             continue; // discard edge
           }
 
@@ -592,9 +585,9 @@ void *run_algorithm(struct thread_params *params) {
           break;
         case TOKEN_WHITE:
         case TOKEN_RED:
-          term.token_color = (enum message_tags)stat.MPI_TAG;
+          token_color = (enum message_tags)stat.MPI_TAG;
           if (mpi_rank == 0) {
-            if (term.token_color == TOKEN_WHITE) {
+            if (token_color == TOKEN_WHITE) {
               // check termination: send message to all ranks then Allreduce
               DEBUG(1, "S2: got white token, sending CHECK_TERMINATION to all "
                        "ranks");
@@ -603,13 +596,13 @@ void *run_algorithm(struct thread_params *params) {
                           MPI_COMM_WORLD);
               }
               // if result is 0, then all queues are empty, and we are done.
-              int empty = term.queue_is_empty ? 0 : 1;
+              int empty = queue_is_empty ? 0 : 1;
               int result = 0;
               MPI_Allreduce(&empty, &result, 1, MPI_INT, MPI_SUM,
                             MPI_COMM_WORLD);
               if (result == 0) {
                 DEBUG(1, "Algorithm complete!");
-                __sync_fetch_and_sub(&term.working_threads, 1);
+                __sync_fetch_and_sub(&working_threads, 1);
                 delete params;
                 algorithm_complete = true;
                 return NULL;
@@ -618,20 +611,20 @@ void *run_algorithm(struct thread_params *params) {
               }
             } else {
               // reset token color
-              term.token_color = TOKEN_WHITE;
+              token_color = TOKEN_WHITE;
             }
           }
           DEBUG(1, "S2: we now have the token");
-          term.have_token = true;
+          have_token = true;
           break;
         case CHECK_TERMINATION: {
           // if result is 0, then all queues are empty, and we are done.
-          int empty = term.queue_is_empty ? 0 : 1; // sum should be 0
+          int empty = queue_is_empty ? 0 : 1; // sum should be 0
           int result = 0;
           MPI_Allreduce(&empty, &result, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
           if (result == 0) {
             DEBUG(1, "Algorithm complete!");
-            __sync_fetch_and_sub(&term.working_threads, 1);
+            __sync_fetch_and_sub(&working_threads, 1);
             delete params;
             algorithm_complete = true;
             return NULL;
@@ -641,33 +634,33 @@ void *run_algorithm(struct thread_params *params) {
           ERROR("got invalid tag in step 2: %s", tag2str(stat.MPI_TAG));
           break;
         }
-        __sync_fetch_and_sub(&term.working_threads, 1);
+        __sync_fetch_and_sub(&working_threads, 1);
       }
     } else {
       struct edge_entry entry = {0, false, 0};
       while (!sink_found) {
         {
-          ScopedLock l(edge_queue.h_lock);
+          ScopedLock l(h_lock);
           // wait for the queue to become non-empty
           while (!edge_queue.pop(entry) && !sink_found && !algorithm_complete) {
             // TODO: may need a mutex. Acquire before entering while loop.
-            term.queue_is_empty = true;
-            if (term.have_token && term.working_threads == 0 && !sink_found) {
+            queue_is_empty = true;
+            if (have_token && working_threads == 0 && !sink_found) {
               // send token
               // note: our color can only be changed after sending the token
               // (done here) or by a running thread. If we are here, then we
               // must be the only running thread.
-              if (term.my_color == TOKEN_RED) {
-                term.token_color = TOKEN_RED;
+              if (my_color == TOKEN_RED) {
+                token_color = TOKEN_RED;
               }
               // send token to next rank
-              term.have_token = false;
+              have_token = false;
               DEBUG(1, "S2: queue empty, sending %s token to R%d",
-                    term.token_color == TOKEN_WHITE ? "white" : "red",
+                    token_color == TOKEN_WHITE ? "white" : "red",
                     (mpi_rank + 1) % mpi_size);
               MPI_Ssend(NULL, 0, MPI_MESSAGE_TYPE, (mpi_rank + 1) % mpi_size,
-                        term.token_color, MPI_COMM_WORLD);
-              term.my_color = TOKEN_WHITE;
+                        token_color, MPI_COMM_WORLD);
+              my_color = TOKEN_WHITE;
             }
           }
           if (algorithm_complete) {
@@ -676,33 +669,21 @@ void *run_algorithm(struct thread_params *params) {
             return NULL;
           }
 
-          __sync_fetch_and_add(&term.working_threads, 1);
-          term.queue_is_empty = false;
-          /*if (!sink_found && entry.is_outgoing) {
-          DEBUG(1, "Processing (%lu, %lu) from queue (fwd)", entry.vertex_index,
-                  vertices[entry.vertex_index]
-                      .out_edges[entry.edge_index]
-                      .vert_index);
-          } else if (!sink_found && !entry.is_outgoing) {
-          DEBUG(1, "Processing (%lu, %lu) from queue (rev)", entry.vertex_index,
-                  vertices[entry.vertex_index]
-                      .in_edges[entry.edge_index]
-                      .vert_index);
-          }*/
-          // release the lock on edge_queue now, so other threads can get
-          // edges
+          __sync_fetch_and_add(&working_threads, 1);
+          queue_is_empty = false;
+          // release the lock on edge_queue now, so other threads can get edges
         }
 
         if (sink_found) {
-          __sync_fetch_and_sub(&term.working_threads, 1);
+          __sync_fetch_and_sub(&working_threads, 1);
           break;
         }
 
         // process edge
         if (entry.is_outgoing) {
-          bt_idx = handle_out_edge(entry);
+          bt_idx = handle_out_edge(entry, tid);
         } else {
-          bt_idx = handle_in_edge(entry);
+          bt_idx = handle_in_edge(entry, tid);
         }
         if (bt_idx != (local_id)-1) {
           DEBUG(1, "Found sink node!");
@@ -718,10 +699,10 @@ void *run_algorithm(struct thread_params *params) {
           MPI_Ssend(NULL, 0, MPI_MESSAGE_TYPE, mpi_rank, SINK_FOUND,
                     MPI_COMM_WORLD);
           sink_found = true;
-          __sync_fetch_and_sub(&term.working_threads, 1);
+          __sync_fetch_and_sub(&working_threads, 1);
           break;
         }
-        __sync_fetch_and_sub(&term.working_threads, 1);
+        __sync_fetch_and_sub(&working_threads, 1);
       }
     }
 
@@ -925,7 +906,7 @@ bool set_label(global_id prev_node, int prev_rank, local_id prev_idx,
   return false;
 }
 
-local_id handle_out_edge(const struct edge_entry &entry) {
+local_id handle_out_edge(const struct edge_entry &entry, int tid) {
   local_id from_id = entry.vertex_index;
   struct out_edge &edge = vertices[from_id].out_edges[entry.edge_index];
 
@@ -953,7 +934,7 @@ local_id handle_out_edge(const struct edge_entry &entry) {
     };
     // update this rank's color if necessary
     if (edge.rank_location < mpi_rank) {
-      term.my_color = TOKEN_RED;
+      my_color = TOKEN_RED;
     }
     DEBUG(2, "S2: sending msg SET_TO_LABEL to R%d", edge.rank_location);
     MPI_Ssend(&msg, 1, MPI_MESSAGE_TYPE, edge.rank_location, SET_TO_LABEL,
@@ -962,7 +943,7 @@ local_id handle_out_edge(const struct edge_entry &entry) {
   return -1;
 }
 
-local_id handle_in_edge(const struct edge_entry &entry) {
+local_id handle_in_edge(const struct edge_entry &entry, int tid) {
   local_id to_id = entry.vertex_index;
   struct in_edge &rev_edge = vertices[to_id].in_edges[entry.edge_index];
 
@@ -1000,7 +981,7 @@ local_id handle_in_edge(const struct edge_entry &entry) {
     };
     // update this rank's color if necessary
     if (rev_edge.rank_location < mpi_rank) {
-      term.my_color = TOKEN_RED;
+      my_color = TOKEN_RED;
     }
     DEBUG(2, "S2: sending msg COMPUTE_FROM_LABEL to R%d",
           rev_edge.rank_location);
@@ -1306,9 +1287,7 @@ int main(int argc, char **argv) {
   sink_id = graph_node_count - 1;
 
   // Start recording time base
-  if (mpi_rank == 0) {
-    g_start_cycles = GetTimeBase();
-  }
+  g_start_cycles = GetTimeBase();
 
   // Run algorithm
   int max_flow = calc_max_flow();

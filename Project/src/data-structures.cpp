@@ -22,9 +22,10 @@ EdgeQueue::~EdgeQueue() {
 
 void EdgeQueue::push(const struct edge_entry &value) {
   auto *node = new QueueNode(value); // Allocate a new node
-  ScopedLock l(t_lock);              // Acquire t_lock in order to access tail
+  t_lock.lock();                     // Acquire t_lock in order to access tail
   tail->next = node;                 // Link node at the end of the linked list
   tail = node;                       // Swing tail to node
+  t_lock.unlock();
 }
 
 bool EdgeQueue::pop(struct edge_entry &entry) {
