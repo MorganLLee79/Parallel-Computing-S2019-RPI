@@ -22,10 +22,17 @@ EdgeQueue::~EdgeQueue() {
 
 void EdgeQueue::push(const struct edge_entry &value) {
   auto *node = new QueueNode(value); // Allocate a new node
-  t_lock.lock();                     // Acquire t_lock in order to access tail
   tail->next = node;                 // Link node at the end of the linked list
   tail = node;                       // Swing tail to node
-  t_lock.unlock();
+}
+
+void EdgeQueue::merge_into(EdgeQueue &dest) {
+  if (head->next != NULL) {
+    dest.tail->next = head->next;
+    dest.tail = tail;
+  }
+  head->next = NULL;
+  tail = head;
 }
 
 bool EdgeQueue::pop(struct edge_entry &entry) {

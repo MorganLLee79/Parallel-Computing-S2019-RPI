@@ -190,6 +190,7 @@ bool algorithm_complete = false;
 
 EdgeQueue edge_queue;
 Mutex h_lock;
+Mutex t_lock;
 
 struct thread_params {
   int tid;
@@ -345,6 +346,7 @@ int user_return_obj_size(void *data, int num_global_ids, ZOLTAN_ID_PTR global,
  */
 void insert_edges(local_id vert_idx, int tid) {
   const struct vertex &v = vertices[vert_idx];
+  EdgeQueue fragment = EdgeQueue();
   DEBUG(2, "Adding %lu edges to queue", v.out_edges.size() + v.in_edges.size());
   for (unsigned int i = 0; i < v.out_edges.size(); ++i) {
     const out_edge &edge = v.out_edges[i];
@@ -359,7 +361,7 @@ void insert_edges(local_id vert_idx, int tid) {
         true,     // is_outgoing
         i,        // edge_index
     };
-    edge_queue.push(temp);
+    fragment.push(temp);
   }
 
   for (unsigned int i = 0; i < v.in_edges.size(); ++i) {
@@ -375,8 +377,11 @@ void insert_edges(local_id vert_idx, int tid) {
         false,    // is_outgoing
         i,        // edge_index
     };
-    edge_queue.push(temp);
+    fragment.push(temp);
   }
+  t_lock.lock();
+  fragment.merge_into(edge_queue);
+  t_lock.unlock();
 }
 
 /**

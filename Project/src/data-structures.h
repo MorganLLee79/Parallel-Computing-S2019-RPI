@@ -97,13 +97,13 @@ public:
 private:
   QueueNode *head;
   QueueNode *tail;
-  Mutex t_lock;
 
 public:
   EdgeQueue();
   ~EdgeQueue();
 
   void push(const struct edge_entry &value);
+  void merge_into(EdgeQueue &dest);
 
   /**
    * Try to remove an entry from the front of the queue and store it in
