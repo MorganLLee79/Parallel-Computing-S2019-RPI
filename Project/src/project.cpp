@@ -357,7 +357,7 @@ void insert_edges(local_id vert_idx) {
         true,     // is_outgoing
         i,        // edge_index
     };
-    DEBUG("Adding (%llu, %llu) to queue (fwd)", v.id, edge.dest_node_id);
+    // DEBUG("Adding (%llu, %llu) to queue (fwd)", v.id, edge.dest_node_id);
     edge_queue.push(temp);
   }
 
@@ -374,7 +374,7 @@ void insert_edges(local_id vert_idx) {
         false,    // is_outgoing
         i,        // edge_index
     };
-    DEBUG("Adding (%llu, %llu) to queue (rev)", v.id, edge.dest_node_id);
+    // DEBUG("Adding (%llu, %llu) to queue (rev)", v.id, edge.dest_node_id);
     edge_queue.push(temp);
   }
 }
@@ -473,8 +473,8 @@ void *run_algorithm(struct thread_params *params) {
         MPI_Recv(&msg, 1, MPI_MESSAGE_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &stat);
         __sync_fetch_and_add(&term.working_threads, 1);
-        DEBUG("S2: got msg %s from R%d", tag2str(stat.MPI_TAG),
-              stat.MPI_SOURCE);
+        /*DEBUG("S2: got msg %s from R%d", tag2str(stat.MPI_TAG),
+              stat.MPI_SOURCE);*/
         switch (stat.MPI_TAG) {
         case SET_TO_LABEL:
           // try to set label of "to" node
@@ -656,7 +656,7 @@ void *run_algorithm(struct thread_params *params) {
 
           __sync_fetch_and_add(&term.working_threads, 1);
           term.queue_is_empty = false;
-          if (!sink_found && entry.is_outgoing) {
+          /*if (!sink_found && entry.is_outgoing) {
             DEBUG("Processing (%lu, %lu) from queue (fwd)", entry.vertex_index,
                   vertices[entry.vertex_index]
                       .out_edges[entry.edge_index]
@@ -666,7 +666,7 @@ void *run_algorithm(struct thread_params *params) {
                   vertices[entry.vertex_index]
                       .in_edges[entry.edge_index]
                       .vert_index);
-          }
+          }*/
           // release the lock on edge_queue now, so other threads can get
           // edges
         }
@@ -717,7 +717,7 @@ void *run_algorithm(struct thread_params *params) {
 
     DEBUG("");
     DEBUG("After step 2:");
-    dump_labels();
+    // dump_labels();
 
     // tell the next rank to stop
     if (mpi_size > 1) {
@@ -871,7 +871,7 @@ void *run_algorithm(struct thread_params *params) {
     DEBUG("=================== END STEP 3 ===================");
 
     DEBUG("After step 3:");
-    dump_flows();
+    // dump_flows();
     DEBUG("");
     pass++;
   }
@@ -928,7 +928,7 @@ local_id handle_out_edge(const struct edge_entry &entry) {
     if (edge.rank_location < mpi_rank) {
       term.my_color = TOKEN_RED;
     }
-    DEBUG("S2: sending msg SET_TO_LABEL to R%d", edge.rank_location);
+    // DEBUG("S2: sending msg SET_TO_LABEL to R%d", edge.rank_location);
     MPI_Send(&msg, 1, MPI_MESSAGE_TYPE, edge.rank_location, SET_TO_LABEL,
              MPI_COMM_WORLD);
   }
@@ -975,7 +975,8 @@ local_id handle_in_edge(const struct edge_entry &entry) {
     if (rev_edge.rank_location < mpi_rank) {
       term.my_color = TOKEN_RED;
     }
-    DEBUG("S2: sending msg COMPUTE_FROM_LABEL to R%d", rev_edge.rank_location);
+    /*DEBUG("S2: sending msg COMPUTE_FROM_LABEL to R%d",
+          rev_edge.rank_location);*/
     MPI_Send(&msg, 1, MPI_MESSAGE_TYPE, rev_edge.rank_location,
              COMPUTE_FROM_LABEL, MPI_COMM_WORLD);
   }
