@@ -7,9 +7,8 @@
 BARN=/gpfs/u/barn/PCP8/PCP8lhrr
 SCRATCH=/gpfs/u/scratch/PCP8/PCP8lhrr
 EXECUTABLE=$SCRATCH/project.out
-srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/roadnet-PA.adj 64 > $SCRATCH/16_rank_results/16r-PA.log &
-srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/roadnet-TX.adj 64 > $SCRATCH/16_rank_results/16r-TX.log &
-srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/roadnet-CA.adj 64 > $SCRATCH/16_rank_results/16r-CA.log &
+srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/email-enron.adj 64 > $SCRATCH/16_rank_results/16r-email.log &
+srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/p2p-gnutella.adj 64 > $SCRATCH/16_rank_results/16r-p2p.log &
 srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/social-slashdot.adj 64 > $SCRATCH/16_rank_results/16r-social.log &
 srun -N16 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/web-google.adj 64 > $SCRATCH/16_rank_results/16r-webcrawl.log &
 wait
