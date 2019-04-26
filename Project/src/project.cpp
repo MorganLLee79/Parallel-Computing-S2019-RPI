@@ -343,8 +343,9 @@ int user_return_obj_size(void *data, int num_global_ids, ZOLTAN_ID_PTR global,
  *
  * @param vert_idx The local index of a newly labelled node.
  */
-void insert_edges(local_id vert_idx) {
+void insert_edges(local_id vert_idx, int tid) {
   const struct vertex &v = vertices[vert_idx];
+  DEBUG(2, "Adding %lu edges to queue", v.out_edges.size() + v.in_edges.size());
   for (unsigned int i = 0; i < v.out_edges.size(); ++i) {
     const out_edge &edge = v.out_edges[i];
     if (edge.rank_location == mpi_rank && labels[edge.vert_index].value != 0) {
@@ -399,7 +400,7 @@ local_id handle_in_edge(const struct edge_entry &entry, int tid);
  * label.
  */
 bool set_label(global_id prev_node, int prev_rank, local_id prev_idx,
-               local_id curr_idx, int value);
+               local_id curr_idx, int value, int tid);
 
 /**
  * Waits for a message with the given tag and sender, and discard any
@@ -450,7 +451,7 @@ void *run_algorithm(struct thread_params *params) {
       local_id i = lookup_global_id(source_id);
       if (i != (local_id)-1) {
         set_label(source_id, mpi_rank, i, i,
-                  numeric_limits<decltype(labels[i].value)>::max());
+                  numeric_limits<decltype(labels[i].value)>::max(), tid);
       }
     }
 
@@ -505,7 +506,7 @@ void *run_algorithm(struct thread_params *params) {
             continue;
           }
           if (set_label(msg.senders_node, stat.MPI_SOURCE, -1, vert_idx,
-                        msg.value)) {
+                        msg.value, tid)) {
             // found sink!
             bt_idx = vert_idx;
             DEBUG(1, "Setting step_3_tid from SET_TO_LABEL...");
@@ -518,6 +519,7 @@ void *run_algorithm(struct thread_params *params) {
           break;
         case COMPUTE_FROM_LABEL:
           // compute and set label of "from" node
+          DEBUG(2, "looking up local id");
           vert_idx = lookup_global_id(msg.receivers_node); // from_id
           if (vert_idx == (local_id)-1) {
             ERROR("COMPUTE_FROM_LABEL sent to wrong rank");
@@ -533,10 +535,13 @@ void *run_algorithm(struct thread_params *params) {
           // TODO: check this, bug found here in handle_in_edge
           // find edge for the sender's node, and get the flow through it
           curr_flow = 0;
+          DEBUG(2, "size of out_edges: %lu",
+                vertices[vert_idx].out_edges.size());
           for (auto it = vertices[vert_idx].out_edges.begin();
                it != vertices[vert_idx].out_edges.end(); ++it) {
             if (it->dest_node_id == msg.senders_node) {
               curr_flow = it->flow;
+              break;
             }
           }
           if (curr_flow <= 0) {
@@ -546,7 +551,7 @@ void *run_algorithm(struct thread_params *params) {
 
           // set label and add edges
           if (set_label(msg.senders_node, stat.MPI_SOURCE, -1, vert_idx,
-                        -min(abs(msg.value), curr_flow))) {
+                        -min(abs(msg.value), curr_flow), tid)) {
             // found sink!
             ERROR("outgoing edge from sink!");
             bt_idx = vert_idx;
@@ -889,7 +894,7 @@ void *run_algorithm(struct thread_params *params) {
 }
 
 bool set_label(global_id prev_node, int prev_rank, local_id prev_idx,
-               local_id curr_idx, int value) {
+               local_id curr_idx, int value, int tid) {
   // atomically set label, only if it was unset before
   if (__sync_bool_compare_and_swap(&labels[curr_idx].value, 0, value)) {
     // label was unset before, so go ahead and set prev pointer
@@ -900,7 +905,7 @@ bool set_label(global_id prev_node, int prev_rank, local_id prev_idx,
       return true;
     } else {
       // add edges to queue
-      insert_edges(curr_idx);
+      insert_edges(curr_idx, tid);
     }
   }
   return false;
@@ -921,7 +926,7 @@ local_id handle_out_edge(const struct edge_entry &entry, int tid) {
   if (edge.rank_location == mpi_rank) {
     // set label and add edges
     if (set_label(vertices[from_id].id, mpi_rank, from_id, edge.vert_index,
-                  label_val)) {
+                  label_val, tid)) {
       return edge.vert_index;
     }
   } else {
@@ -967,7 +972,8 @@ local_id handle_in_edge(const struct edge_entry &entry, int tid) {
     int label_val = -min(abs(labels[to_id].value), curr_flow);
 
     // set label and add edges
-    if (set_label(vertices[to_id].id, mpi_rank, to_id, from_id, label_val)) {
+    if (set_label(vertices[to_id].id, mpi_rank, to_id, from_id, label_val,
+                  tid)) {
       ERROR("outgoing edge from sink!");
       return from_id;
     }
