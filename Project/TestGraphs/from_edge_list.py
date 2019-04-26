@@ -4,6 +4,7 @@
 ###
 
 import networkx as nx
+import numpy as np
 import sys
 
 if len(sys.argv) != 3:
@@ -29,6 +30,7 @@ m = nx.number_of_edges(G)
 graph_file.write(f"{n:d} {m:d}\n")
 
 for u in range(n):
-    graph_file.write(" ".join(str(v)+" "+str(1) for v in set(nx.all_neighbors(G,u)))+"\n")
+    # Add random capacity in the range [1,10]
+    graph_file.write(" ".join(str(v)+" "+str(np.random.randint(1,11)) for v in set(nx.all_neighbors(G,u)))+"\n")
 
 graph_file.close()
