@@ -6,9 +6,9 @@
 #sbatch --partition medium --nodes 128 --time 30 scratch/.../128_rank_experiments.sh
 BARN=/gpfs/u/barn/PCP8/PCP8lhrr
 SCRATCH=/gpfs/u/scratch/PCP8/PCP8lhrr
-EXECUTABLE=$BARN/project.out
-srun -N128 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/roadnet-PA.adj 64 > $SCRATCH/128_rank_results/128r-PA.log
-srun -N128 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/roadnet-TX.adj 64 > $SCRATCH/128_rank_results/128r-TX.log
-srun -N128 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/roadnet-CA.adj 64 > $SCRATCH/128_rank_results/128r-CA.log
-srun -N128 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/social-slashdot.adj 64 > $SCRATCH/128_rank_results/128r-social.log
-srun -N128 --ntasks-per-node=1 --overcommit EXECUTABLE $SCRATCH/TestGraphs/web-google.adj 64 > $SCRATCH/128_rank_results/128r-webcrawl.log
+EXECUTABLE=$SCRATCH/project.out
+srun -N128 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/roadnet-PA.adj 64 > $SCRATCH/128_rank_results/128r-PA.log
+srun -N128 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/roadnet-TX.adj 64 > $SCRATCH/128_rank_results/128r-TX.log
+srun -N128 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/roadnet-CA.adj 64 > $SCRATCH/128_rank_results/128r-CA.log
+srun -N128 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/social-slashdot.adj 64 > $SCRATCH/128_rank_results/128r-social.log
+srun -N128 --ntasks-per-node=1 --overcommit $EXECUTABLE $SCRATCH/TestGraphs/web-google.adj 64 > $SCRATCH/128_rank_results/128r-webcrawl.log
