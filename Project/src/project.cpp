@@ -1002,7 +1002,7 @@ int calc_max_flow() {
     pthread_join(threads[i], NULL);
   }
 
-  cerr << "Calculation complete!\n";
+  cout << "Calculation complete!\n";
 
   // sum up flow out of source node
   local_id src_idx = lookup_global_id(source_id);
@@ -1083,7 +1083,7 @@ int main(int argc, char **argv) {
   int mpi_thread_support;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &mpi_thread_support);
   if (mpi_thread_support != MPI_THREAD_MULTIPLE) {
-    cerr << "Error: MPI_THREAD_MULTIPLE not supported!" << endl;
+    cout << "Error: MPI_THREAD_MULTIPLE not supported!" << endl;
     MPI_Abort(MPI_COMM_WORLD, 1);
     return 1;
   }
@@ -1108,27 +1108,25 @@ int main(int argc, char **argv) {
   // check arguments
   if (argc != 3) {
     if (mpi_rank == 0)
-      cerr << "ERROR: Was expecting " << argv[0]
+      cout << "ERROR: Was expecting " << argv[0]
            << " filepath_to_input num_threads" << endl;
-    MPI_Finalize();
-    exit(1);
+    MPI_Abort(MPI_COMM_WORLD, 1);
   }
   num_threads = atoi(argv[2]);
   if (mpi_rank == 0) {
     graph_node_count = read_file(argv[1]);
-    if (graph_node_count == 0)
-      cerr << "Error reading file" << endl;
+    if (graph_node_count == 0) {
+      cout << "Error reading file" << endl;
+      MPI_Abort(MPI_COMM_WORLD, 2);
+    }
   } else {
     // Nothing for other ranks, wait for partitioning
   }
 
-  MPI_Bcast(&graph_node_count, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  printf("rank=%d, size=%d\n", mpi_rank, mpi_size);
+  MPI_Bcast(&graph_node_count, 1, GLOBAL_ID_TYPE, 0, MPI_COMM_WORLD);
   // printf("Ready to partition\n");
-
-  if (graph_node_count == 0) {
-    MPI_Finalize();
-    exit(2);
-  }
+  printf("graph_node_count: %llu\n", graph_node_count);
 
   // Zoltan Initialization
   Zoltan_Initialize(argc, argv, &zoltan_version);
