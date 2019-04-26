@@ -21,3 +21,11 @@ n, ranks, threads, runtime, partition time
 1000, 4, 64, 0.88, 4.39
 1000, 4, 32, 0.92, 4.36
 1000, 4, 16, 1.09, 6.79
+
+Split:
+On small: 4, 4_real, 16
+
+On medium: 16_real, 64, 64_real, 128, 128_real
+EJ: 4, 16_real, 128_real
+CJ: 4_real, 64
+HL: 16, 64_real, 128
