@@ -1,7 +1,7 @@
-MPICXX ?= mpic++
+include $(ZOLTAN_INSTALL_DIR)/include/Makefile.export.zoltan
 
-CXXFLAGS += -O3
-LDFLAGS += -lpthread -lzoltan -lparmetis -lmetis
+CXXFLAGS += -qlanglvl=extended0x $(ZOLTAN_INCLUDES) -I$(ZOLTAN_INSTALL_DIR)/include -O5
+LDFLAGS += -qlanglvl=extended0x -lpthread $(ZOLTAN_LIBS)
 
 all: project.out
 
